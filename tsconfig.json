@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "strict": true,
+        "baseUrl": ".",
+        "paths": {
+            "@ipc.js": [
+                "src/main/ipc.js"
+            ]
+        }
+    },
+    "include": [
+        "src",
+        "scripts",
+        "bin"
+    ]
+}

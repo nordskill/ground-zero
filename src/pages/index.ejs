@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<%- include('../partials/head', { title: 'Test : Home' }) %>
+
+    <body>
+        <%- include('../partials/header') %>
+            <main>
+                <h1>Vite + EJS + SCSS</h1>
+                <p>HMR active for JS/CSS. Edit <code>src/assets/scss/main.scss</code> or
+                    <code>src/assets/js/main.js</code>.
+                </p>
+                <button id="btn-pop">popup</button>
+            </main>
+            <%- include('../partials/footer') %>
+                <div id="pop" popover>some text</div>
+                <script type="module" src="<%= moduleEntry %>"></script>
+    </body>
+
+</html>

@@ -2,7 +2,7 @@
 
 Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vite, EJS templates, and modern CSS. Install it, run one command, and you get hot module reloading, BrowserSync mirroring, and production builds without writing any config files.
 
-## Why ground-zero?
+## Why Ground Zero?
 
 - **Zero setup:** Vite config, BrowserSync, and file watching are bundled, so you only write templates and CSS.
 - **Pure EJS + CSS:** No React, no SCSS pipeline—just standard EJS partials and native CSS features (nesting, layers, imports).

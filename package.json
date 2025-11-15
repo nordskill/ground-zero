@@ -1,5 +1,5 @@
 {
-    "name": "ground-zero",
+    "name": "@nordskill/ground-zero",
     "private": false,
     "version": "1.0.0",
     "description": "Zero-config Vite + EJS static site generator with hot module reloading and BrowserSync-powered dev server.",

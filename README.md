@@ -23,7 +23,7 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 ```bash
 mkdir my-site && cd my-site
 npm init -y
-npm install ground-zero
+npm install @nordskill/ground-zero
 
 # minimal structure
 mkdir -p src/pages src/partials src/assets/css src/assets/js

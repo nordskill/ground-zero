@@ -17,6 +17,7 @@ const MODULE_ENTRY = `/@fs/${MODULE_ENTRY_ABS.replaceAll('\\', '/')}`;
 /**
  * Strip EJS comments (<%# ... %>) with support for nested tags.
  * Allows using <%- include(...) %> inside comments.
+ * Preserves line numbers by keeping newlines.
  * @param {string} str - Template content
  * @returns {string} Content with comments removed
  */
@@ -44,6 +45,10 @@ function stripEjsComments(str) {
                     depth--;
                     i += 2;
                 } else {
+                    // Preserve newlines to maintain line numbers in source maps
+                    if (str[i] === '\n') {
+                        out += '\n';
+                    }
                     i++;
                 }
             }

@@ -15,6 +15,60 @@ const MODULE_ENTRY_ABS = join(CWD, 'src/assets/js/main.js');
 const MODULE_ENTRY = `/@fs/${MODULE_ENTRY_ABS.replaceAll('\\', '/')}`;
 
 /**
+ * Strip EJS comments (<%# ... %>) with support for nested tags.
+ * Allows using <%- include(...) %> inside comments.
+ * @param {string} str - Template content
+ * @returns {string} Content with comments removed
+ */
+function stripEjsComments(str) {
+    let out = '';
+    let i = 0;
+    const len = str.length;
+    while (i < len) {
+        if (str.startsWith('<%#', i)) {
+            let depth = 1;
+            i += 3; // Skip start tag
+            while (i < len && depth > 0) {
+                // Check for literal escape <%% - ignore it
+                if (str.startsWith('<%%', i)) {
+                    i += 3;
+                }
+                // Check for opening tags <% (including variants)
+                else if (str.startsWith('<%', i)) {
+                    depth++;
+                    i += 2;
+                }
+                // Check for closing tags %> (including variants like -%>, _%>)
+                // Since all end with %>, we just look for that.
+                else if (str.startsWith('%>', i)) {
+                    depth--;
+                    i += 2;
+                } else {
+                    i++;
+                }
+            }
+        } else {
+            out += str[i];
+            i++;
+        }
+    }
+    return out;
+}
+
+/**
+ * Read file and strip EJS comments
+ * @param {string} filePath
+ * @returns {string}
+ */
+function readEjsFile(filePath) {
+    const content = readFileSync(filePath, 'utf8');
+    return stripEjsComments(content);
+}
+
+// Override EJS file loader to support custom comment stripping in includes
+ejs.fileLoader = readEjsFile;
+
+/**
  * Recursively walk directory and find all .ejs files
  * @param {string} dir - Directory path to walk
  * @returns {string[]} Array of absolute paths to .ejs files
@@ -42,7 +96,7 @@ function readPartials() {
     if (!existsSync(PARTIALS_DIR)) return map;
     for (const file of walkDir(PARTIALS_DIR)) {
         const key = pathRelative(PARTIALS_DIR, file).replace(/\.ejs$/, '');
-        map[key] = readFileSync(file, 'utf8');
+        map[key] = readEjsFile(file);
     }
     return map;
 }
@@ -70,7 +124,7 @@ function resolveInclude(fromFile, includePath) {
  * @returns {Set<string>} Set of absolute paths to included files
  */
 function scanIncludes(filePath) {
-    const src = readFileSync(filePath, 'utf8');
+    const src = readEjsFile(filePath);
     const rx = /include\(\s*['"]([^'"]+)['"]/g;
     /** @type {Set<string>} */
     const targets = new Set();
@@ -168,7 +222,7 @@ function ensureOutDir() {
  */
 function compilePageWithPartials(pageFileAbs, partials) {
     if (!existsSync(pageFileAbs)) return;
-    const template = readFileSync(pageFileAbs, 'utf8');
+    const template = readEjsFile(pageFileAbs);
     const html = ejs.render(
         template,
         { partials, moduleEntry: MODULE_ENTRY },

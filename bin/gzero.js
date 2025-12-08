@@ -2,6 +2,7 @@
 /**
  * ground-zero dev CLI:
  * - Compiles EJS pages (src/pages -> dev-html)
+ * - Starts SVG icons watcher (regenerates sprite on icon changes)
  * - Starts Vite dev server (HMR + browser-sync) with packaged config
  */
 import { spawn } from 'node:child_process';
@@ -24,6 +25,24 @@ try {
 }
 
 const configPath = pathResolve(PKG_ROOT, 'vite.config.js');
+const watchIconsScript = pathResolve(PKG_ROOT, 'scripts/watch-icons.js');
+
+/** @type {import('node:child_process').ChildProcess | null} */
+let iconsWatcher = null;
+
+/**
+ * Start the SVG icons watcher in the background.
+ * @returns {void}
+ */
+function runIconsWatcher() {
+    iconsWatcher = spawn(process.execPath, [watchIconsScript], {
+        stdio: 'inherit',
+        cwd: process.cwd()
+    });
+    iconsWatcher.on('error', (err) => {
+        console.error('[watch-icons] failed to start:', err.message);
+    });
+}
 
 /**
  * Start Vite dev server using the packaged config file.
@@ -34,18 +53,28 @@ function runViteServe() {
         stdio: 'inherit',
         cwd: process.cwd()
     });
+    child.on('error', (err) => {
+        console.error('[vite] failed to start:', err.message);
+        if (iconsWatcher) iconsWatcher.kill();
+        process.exit(1);
+    });
     child.on('exit', (code) => {
+        // Kill icons watcher when Vite exits
+        if (iconsWatcher) iconsWatcher.kill();
         process.exit(code ?? 0);
     });
 }
 
 /**
- * Entrypoint: compile EJS then start the dev server.
+ * Entrypoint: compile EJS, start icons watcher, then start the dev server.
  * @returns {Promise<void>}
  */
 (async () => {
     // Precompile EJS pages so Vite has HTML inputs
     await compileAll();
+    // Start icons watcher in background
+    runIconsWatcher();
+    // Start Vite dev server (foreground, exits when done)
     runViteServe();
 })().catch((err) => {
     console.error(err);

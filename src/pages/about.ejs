@@ -3,27 +3,40 @@
 <%- include('../partials/head', { title: 'Test : About' }) %>
 
     <body>
+        <%- include('../partials/svg-sprite') %>
         <%- include('../partials/header') %>
-            <main>
-                <h1>About</h1>
-                <p>This is a minimal demo using EJS templates compiled to static HTML.</p>
-                <div class="notices">
-                    <div class="notice">
-                        <h2 class="notice-heading">Notice</h2>
-                        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                    </div>
-                    <div class="notice warning">
-                        <h2 class="warning-heading">Warning</h2>
-                        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                    </div>
-                    <div class="notice success">
-                        <h2 class="success-heading">Success</h2>
-                        <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                    </div>
+        <main>
+            <h1>About</h1>
+            <p>This is a minimal demo using EJS templates compiled to static HTML.</p>
+            <div class="notices">
+                <div class="notice">
+                    <h2 class="notice-heading">
+                        <svg style="width: 24px; height: 24px;">
+                            <use href="#icon-home"></use>
+                        </svg>
+                        Notice</h2>
+                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
                 </div>
-            </main>
-            <%- include('../partials/footer') %>
-                <script type="module" src="<%= moduleEntry %>"></script>
+                <div class="notice warning">
+                    <h2 class="warning-heading">
+                        <svg style="width: 24px; height: 24px;">
+                            <use href="#icon-search"></use>
+                        </svg>
+                        Warning</h2>
+                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
+                </div>
+                <div class="notice success">
+                    <h2 class="success-heading">
+                        <svg style="width: 24px; height: 24px;">
+                            <use href="#icon-settings"></use>
+                        </svg>
+                        Success</h2>
+                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
+                </div>
+            </div>
+        </main>
+        <%- include('../partials/footer') %>
+        <script type="module" src="<%= moduleEntry %>"></script>
     </body>
 
 </html>

@@ -2,11 +2,32 @@ import { defineConfig } from 'vite';
 import { resolve as pathResolve, isAbsolute as pathIsAbsolute } from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
 import { compileAll, compilePage, buildDependencyGraph, getImpactedPages } from './scripts/compile-ejs.js';
+import { generateSvgSprite } from './scripts/svg-sprite.js';
 import browserSync from 'vite-plugin-browser-sync';
 
 // Resolve everything relative to the caller's project root (where CLI is run),
 // not the package install directory. This makes the packaged config reusable.
 const PROJECT_ROOT = process.cwd();
+
+// Vite plugin for SVG sprite: only handles production builds.
+// Dev watching is handled by the standalone watch-icons.js script using native fs.watch.
+function svgSpritePlugin() {
+    const iconsDir = pathResolve(PROJECT_ROOT, 'src/assets/icons');
+    const spritePartial = pathResolve(PROJECT_ROOT, 'src/partials/svg-sprite.ejs');
+
+    return {
+        name: 'svg-sprite',
+        async buildStart() {
+            try {
+                await generateSvgSprite(iconsDir, spritePartial);
+                console.log('[svg-sprite] generated (build)');
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error('[svg-sprite] error:', message);
+            }
+        }
+    };
+}
 
 function ejsLiveReload() {
     let graph = null;
@@ -114,6 +135,7 @@ export default defineConfig(() => {
             }
         },
         plugins: [
+            svgSpritePlugin(),
             ejsLiveReload(),
             browserSync()
         ]

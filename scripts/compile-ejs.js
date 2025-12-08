@@ -3,12 +3,15 @@ import { join, dirname, resolve as pathResolve, relative as pathRelative, extnam
 import { pathToFileURL } from 'node:url';
 // @ts-ignore - ejs doesn't have type definitions
 import ejs from 'ejs';
+import { generateSvgSprite } from './svg-sprite.js';
 
 // Base paths
 const CWD = process.cwd();
 const PAGES_DIR = join(CWD, 'src/pages');
 const PARTIALS_DIR = join(CWD, 'src/partials');
 const OUT_DIR = join(CWD, 'dev-html');
+const ICONS_DIR = join(CWD, 'src/assets/icons');
+const SPRITE_PARTIAL = join(CWD, 'src/partials/svg-sprite.ejs');
 
 // Use Vite's /@fs/ to load modules from outside the dev server root (dev-html/)
 const MODULE_ENTRY_ABS = join(CWD, 'src/assets/js/main.js');
@@ -258,6 +261,8 @@ export async function compilePage(pageFileAbs) {
  * @returns {Promise<void>}
  */
 export async function compileAll() {
+    // Ensure the SVG sprite partial is up-to-date before compiling pages
+    await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
     ensureOutDir();
     const partials = readPartials();
     const pages = walkDir(PAGES_DIR);

@@ -3,17 +3,23 @@
 <%- include('../partials/head', { title: 'Test : Home' }) %>
 
     <body>
+        <%- include('../partials/svg-sprite') %>
         <%- include('../partials/header') %>
-            <main>
-                <h1>Vite + EJS + SCSS</h1>
-                <p>HMR active for JS/CSS. Edit <code>src/assets/scss/main.scss</code> or
-                    <code>src/assets/js/main.js</code>.
-                </p>
-                <button id="btn-pop">popup</button>
-            </main>
-            <%- include('../partials/footer') %>
-                <div id="pop" popover>some text</div>
-                <script type="module" src="<%= moduleEntry %>"></script>
+        <main>
+            <h1>Vite + EJS + CSS</h1>
+            <p>HMR active for JS/CSS. Edit <code>src/assets/css/main.scss</code> or
+                <code>src/assets/js/main.js</code>.
+            </p>
+            <div>
+                <svg style="width: 24px; height: 24px;">
+                    <use href="#icon-home"></use>
+                </svg>
+            </div>
+            <button id="btn-pop">popup</button>
+        </main>
+        <%- include('../partials/footer') %>
+        <div id="pop" popover>some text</div>
+        <script type="module" src="<%= moduleEntry %>"></script>
     </body>
 
 </html>

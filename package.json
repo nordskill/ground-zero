@@ -18,8 +18,8 @@
     "license": "MIT",
     "scripts": {
         "ejs": "node scripts/compile-ejs.js",
-        "start": "node scripts/compile-ejs.js && vite",
-        "build": "node scripts/compile-ejs.js && vite build && npm run minify-css",
+        "start": "node bin/gzero.js",
+        "build": "node bin/gzero-build.js",
         "minify-css": "node scripts/minify-css.js"
     },
     "bin": {

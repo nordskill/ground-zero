@@ -18,6 +18,42 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 | **One-click commands** | `gzero` runs the dev loop (compile + Vite serve). `gzero-build` compiles, then minifies CSS with esbuild. |
 | **Modern CSS** | Write plain `.css` files that use nesting, layers, imports, and variables—Vite handles the rest. |
 
+## EJS comments
+
+Ground Zero supports multiline comments that can contain EJS tags inside them. Anything between `<%#` and `%>` is stripped out during compilation:
+
+```ejs
+<%#
+This entire block is removed from the output.
+You can even put EJS tags here and they won't run:
+<%- include('partials/example') %>
+%>
+```
+
+This is useful for temporarily disabling sections of a template or leaving notes for yourself.
+
+## SVG icons
+
+Put your `.svg` files in `src/assets/icons/`. Ground Zero automatically generates a sprite file and watches for changes during development.
+
+To use icons in a template:
+
+1. Include the sprite once per page (usually right after `<body>`):
+
+```ejs
+<%- include('../partials/svg-sprite') %>
+```
+
+2. Reference icons by filename using `<use>`:
+
+```html
+<svg style="width: 24px; height: 24px;">
+    <use href="#icon-home"></use>
+</svg>
+```
+
+The icon ID follows the pattern `#icon-{filename}` — so `home.svg` becomes `#icon-home`.
+
 ## Quick start
 
 ```bash

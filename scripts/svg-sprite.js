@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname, extname, resolve as pathResolve } from 'node:path';
+import { optimize } from 'svgo';
 
 const SVG_OPEN_TAG_RE = /<svg\b[^>]*>/i;
 
@@ -26,15 +27,12 @@ function svgToSymbol(id, source) {
     const closeIndex = lower.lastIndexOf('</svg>');
     const inner = closeIndex === -1 ? str.slice(afterOpen) : str.slice(afterOpen, closeIndex);
 
-    // Clean up the opening tag: drop xmlns/width/height, keep viewBox and others
-    let symbolTag = openTag
-        .replace(/\s+xmlns="[^"]*"/gi, '')
-        .replace(/\s+width="[^"]*"/gi, '')
-        .replace(/\s+height="[^"]*"/gi, '')
-        .replace(/<svg\b/i, `<symbol id="${id}"`);
+    // Sprite-specific transformation: convert <svg> to <symbol>
+    let symbolTag = openTag.replace(/<svg\b/i, `<symbol id="${id}"`);
 
-    const innerTrimmed = inner.trim();
-    const content = innerTrimmed ? `\n${innerTrimmed}\n` : '\n';
+    // Normalize inner content: trim and remove all newlines/whitespace to keep symbol on one line
+    const innerTrimmed = inner.trim().replace(/\s+/g, ' ');
+    const content = innerTrimmed || '';
 
     return `${symbolTag}${content}</symbol>`;
 }
@@ -74,7 +72,8 @@ export async function generateSvgSprite(iconsDirPath, outputFilePath) {
     } catch (err) {
         // If icons directory does not exist, still emit an empty sprite to avoid template failures.
         if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
-            const emptySprite = '<svg class="svg_sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden"></svg>\n';
+            const emptySprite = `<svg class="svg_sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+</svg>\n`;
             const existing = await readFile(outputFileAbs, 'utf8').catch(() => '');
             if (existing === emptySprite) return;
             await mkdir(dirname(outputFileAbs), { recursive: true });
@@ -99,9 +98,40 @@ export async function generateSvgSprite(iconsDirPath, outputFilePath) {
         svgFiles.map(async (fileName) => {
             const filePath = pathResolve(iconsDirAbs, fileName);
             const raw = await readFile(filePath, 'utf8');
-            // SVGO or other optimizations can be applied here in the future
+            
+            // Reference: https://svgo.dev/docs/preset-default/
+            const optimized = optimize(raw, {
+                plugins: [
+                    {
+                        name: 'preset-default',
+                        params: {
+                            overrides: {
+                                // Keep IDs for sprite symbols (they're needed for <use> references)
+                                cleanupIds: false,
+                                cleanupNumericValues: {
+                                    floatPrecision: 3,
+                                },
+                                convertTransform: {
+                                    floatPrecision: 4,
+                                },
+                            },
+                        },
+                    },
+                    'removeDimensions',
+                    'removeXMLNS',
+                    'removeXlink',
+                    {
+                        name: 'removeAttrs',
+                        params: {
+                            // the fill and stroke colors should be defined in CSS depending on the context
+                            attrs: '(fill|stroke)',
+                        },
+                    },
+                ],
+            });
+
             const id = makeSymbolId(fileName);
-            const symbol = svgToSymbol(id, raw);
+            const symbol = svgToSymbol(id, optimized.data);
             if (symbol) {
                 symbols.push({ fileName, symbol });
             }
@@ -111,12 +141,11 @@ export async function generateSvgSprite(iconsDirPath, outputFilePath) {
     // Ensure deterministic ordering in the final sprite for stable builds.
     symbols.sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0));
 
-    const body =
-        symbols.length > 0
-            ? `\n${symbols.map((s) => s.symbol).join('\n\n')}\n\n`
-            : '\n';
+    const body = symbols.length > 0 ? symbols.map((s) => s.symbol).join('\n') : '';
 
-    const sprite = `<svg class="svg_sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">${body}</svg>\n`;
+    const sprite = `<svg class="svg_sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+${body}
+</svg>\n`;
 
     // Only write if content changed to avoid triggering unnecessary EJS recompilation
     const existing = await readFile(outputFileAbs, 'utf8').catch(() => '');
@@ -128,5 +157,3 @@ export async function generateSvgSprite(iconsDirPath, outputFilePath) {
     await writeFile(tmpFile, sprite, 'utf8');
     await rename(tmpFile, outputFileAbs);
 }
-
-

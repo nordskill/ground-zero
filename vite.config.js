@@ -69,13 +69,10 @@ function ejsLiveReload() {
         apply: 'serve',
         async configureServer(server) {
             graph = await buildDependencyGraph();
-            const pagesDir = pathResolve(PROJECT_ROOT, 'src/pages');
-            const partialsDir = pathResolve(PROJECT_ROOT, 'src/partials');
+            const srcDir = pathResolve(PROJECT_ROOT, 'src');
             const watchGlobs = [
-                `${pagesDir}/**/*.ejs`,
-                `${partialsDir}/**/*.ejs`,
-                pagesDir,
-                partialsDir
+                `${srcDir}/**/*.ejs`,
+                srcDir
             ];
             server.watcher.add(watchGlobs);
             console.log('[ejs-live-reload] watching:', watchGlobs);

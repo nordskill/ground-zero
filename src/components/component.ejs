@@ -1,0 +1,9 @@
+<div class="notice<%= typeof type !== 'undefined' && type ? ` ${type}` : '' %>">
+    <h2 class="<%= typeof type !== 'undefined' && type ? `${type}-heading` : 'notice-heading' %>">
+        <svg style="width: 24px; height: 24px;">
+            <use href="#<%= icon %>"></use>
+        </svg>
+        <%= heading %>
+    </h2>
+    <p><%= text %></p>
+</div>

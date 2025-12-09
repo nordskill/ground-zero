@@ -9,30 +9,26 @@
             <h1>About</h1>
             <p>This is a minimal demo using EJS templates compiled to static HTML.</p>
             <div class="notices">
-                <div class="notice">
-                    <h2 class="notice-heading">
-                        <svg style="width: 24px; height: 24px;">
-                            <use href="#icon-home"></use>
-                        </svg>
-                        Notice</h2>
-                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                </div>
-                <div class="notice warning">
-                    <h2 class="warning-heading">
-                        <svg style="width: 24px; height: 24px;">
-                            <use href="#icon-search"></use>
-                        </svg>
-                        Warning</h2>
-                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                </div>
-                <div class="notice success">
-                    <h2 class="success-heading">
-                        <svg style="width: 24px; height: 24px;">
-                            <use href="#icon-settings"></use>
-                        </svg>
-                        Success</h2>
-                    <p>Lorem ipsum dolor sit amet consectetur adipisicing elit.</p>
-                </div>
+                <%- include('../components/component', {
+                    type: '',
+                    icon: 'icon-home',
+                    heading: 'Notice',
+                    text: 'Lorem ipsum dolor sit amet consectetur adipisicing elit.'
+                }) %>
+                <%- include('../components/component',
+                {
+                    type: 'warning',
+                    icon: 'icon-search',
+                    heading: 'Warning',
+                    text: 'Lorem ipsum dolor sit amet consectetur adipisicing elit.'
+                }) %>
+                <%- include('../components/component',
+                {
+                    type: 'success',
+                    icon: 'icon-settings',
+                    heading: 'Success',
+                    text: 'Lorem ipsum dolor sit amet consectetur adipisicing elit.'
+                }) %>
             </div>
         </main>
         <%- include('../partials/footer') %>

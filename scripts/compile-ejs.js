@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { join, dirname, resolve as pathResolve, relative as pathRelative, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 // @ts-ignore - ejs doesn't have type definitions
@@ -9,7 +9,7 @@ import { generateSvgSprite } from './svg-sprite.js';
 const CWD = process.cwd();
 const PAGES_DIR = join(CWD, 'src/pages');
 const PARTIALS_DIR = join(CWD, 'src/partials');
-const OUT_DIR = join(CWD, 'dev-html');
+const DEV_OUT_DIR = join(CWD, 'dev-html');
 const ICONS_DIR = join(CWD, 'src/assets/icons');
 const SPRITE_PARTIAL = join(CWD, 'src/partials/svg-sprite.ejs');
 
@@ -219,16 +219,41 @@ export function getImpactedPages(changedPaths, graph) {
     return result;
 }
 
-function ensureOutDir() {
-    mkdirSync(OUT_DIR, { recursive: true });
+/**
+ * Resolve the output directory for compiled HTML.
+ * @param {string | undefined} outDir
+ * @returns {string}
+ */
+function getOutDir(outDir) {
+    return outDir ? pathResolve(CWD, outDir) : DEV_OUT_DIR;
+}
+
+/**
+ * Ensure the output directory exists.
+ * @param {string} outDir
+ * @returns {void}
+ */
+function ensureOutDir(outDir) {
+    mkdirSync(outDir, { recursive: true });
+}
+
+/**
+ * Remove the compiled HTML output directory before a full rebuild.
+ * @param {string} outDir
+ * @returns {void}
+ */
+function resetOutDir(outDir) {
+    rmSync(outDir, { recursive: true, force: true });
+    ensureOutDir(outDir);
 }
 
 /**
  * Compile a single EJS page with partials
  * @param {string} pageFileAbs - Absolute path to the page file
  * @param {Record<string, string>} partials - Map of partial names to content
+ * @param {string} outDir - Absolute path to the compiled HTML output directory
  */
-function compilePageWithPartials(pageFileAbs, partials) {
+function compilePageWithPartials(pageFileAbs, partials, outDir) {
     if (!existsSync(pageFileAbs)) return;
     const template = readEjsFile(pageFileAbs);
     const html = ejs.render(
@@ -238,9 +263,9 @@ function compilePageWithPartials(pageFileAbs, partials) {
     );
     // Preserve directory structure relative to pages dir
     const rel = pathRelative(PAGES_DIR, pageFileAbs).replace(/\.ejs$/, '.html');
-    const outPath = join(OUT_DIR, rel);
-    const outDir = dirname(outPath);
-    mkdirSync(outDir, { recursive: true });
+    const outPath = join(outDir, rel);
+    const pageOutDir = dirname(outPath);
+    mkdirSync(pageOutDir, { recursive: true });
     writeFileSync(outPath, html);
     console.log('Built', outPath);
 }
@@ -248,30 +273,34 @@ function compilePageWithPartials(pageFileAbs, partials) {
 /**
  * Compile a single EJS page
  * @param {string} pageFileAbs - Absolute path to the page file
+ * @param {string} [outDir] - HTML output directory; defaults to dev-html/
  * @returns {Promise<void>}
  */
-export async function compilePage(pageFileAbs) {
-    ensureOutDir();
+export async function compilePage(pageFileAbs, outDir) {
+    const targetOutDir = getOutDir(outDir);
+    ensureOutDir(targetOutDir);
     const partials = readPartials();
-    compilePageWithPartials(pageFileAbs, partials);
+    compilePageWithPartials(pageFileAbs, partials, targetOutDir);
 }
 
 /**
  * Compile all EJS pages
+ * @param {string} [outDir] - HTML output directory; defaults to dev-html/
  * @returns {Promise<void>}
  */
-export async function compileAll() {
+export async function compileAll(outDir) {
+    const targetOutDir = getOutDir(outDir);
     // Ensure the SVG sprite partial is up-to-date before compiling pages
     await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
-    ensureOutDir();
+    resetOutDir(targetOutDir);
     const partials = readPartials();
     const pages = walkDir(PAGES_DIR);
     for (const page of pages) {
-        compilePageWithPartials(page, partials);
+        compilePageWithPartials(page, partials, targetOutDir);
     }
 }
 
-// CLI entry: `node build/compile-ejs.js`
+// CLI entry: `node scripts/compile-ejs.js`
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     compileAll().catch((err) => {
         console.error(err);

@@ -8,6 +8,9 @@ import browserSync from 'vite-plugin-browser-sync';
 // Resolve everything relative to the caller's project root (where CLI is run),
 // not the package install directory. This makes the packaged config reusable.
 const PROJECT_ROOT = process.cwd();
+const HTML_ROOT = process.env.GZERO_HTML_ROOT
+    ? pathResolve(PROJECT_ROOT, process.env.GZERO_HTML_ROOT)
+    : pathResolve(PROJECT_ROOT, 'dev-html');
 
 // Vite plugin for SVG sprite: only handles production builds.
 // Dev watching is handled by the standalone watch-icons.js script using native fs.watch.
@@ -111,11 +114,11 @@ function findHtmlEntries(rootDir) {
 
 export default defineConfig(() => {
     // Discover all compiled HTML pages as build inputs (multi-page)
-    const htmlInputs = findHtmlEntries(pathResolve(PROJECT_ROOT, 'dev-html'));
+    const htmlInputs = findHtmlEntries(HTML_ROOT);
 
     return {
-        // Serve compiled HTML from dev-html/ under the caller's project
-        root: pathResolve(PROJECT_ROOT, 'dev-html'),
+        // Serve compiled HTML from the active HTML cache under the caller's project
+        root: HTML_ROOT,
         server: {
             fs: {
                 // Allow importing from the project root so /src/* works during dev
@@ -138,5 +141,4 @@ export default defineConfig(() => {
         ]
     };
 });
-
 

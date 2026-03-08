@@ -13,8 +13,8 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 
 | Concept | What it means |
 | --- | --- |
-| **EJS pages** | Files under `src/pages/*.ejs` become HTML in `dev-html/` (dev) or `build/` (prod). Include partials from `src/partials/*.ejs`. |
-| **Module entry** | `src/assets/js/main.js` is injected via `/@fs/` so you can import modules without fiddling with paths. |
+| **EJS pages** | Files under `src/pages/**/*.ejs` compile into matching `.html` pages for development and production. |
+| **Module entry** | `src/assets/js/main.js` is exposed to templates as `moduleEntry`. Add `<script type="module" src="<%= moduleEntry %>"></script>` to pages that need JS. |
 | **One-click commands** | `gzero` runs the dev loop (compile + Vite serve). `gzero-build` compiles, then minifies CSS with esbuild. |
 | **Modern CSS** | Write plain `.css` files that use nesting, layers, imports, and variables—Vite handles the rest. |
 
@@ -26,7 +26,7 @@ Ground Zero supports multiline comments that can contain EJS tags inside them. A
 <%#
 This entire block is removed from the output.
 You can even put EJS tags here and they won't run:
-<%- include('partials/example') %>
+<%- include('../partials/example') %>
 %>
 ```
 
@@ -34,7 +34,7 @@ This is useful for temporarily disabling sections of a template or leaving notes
 
 ## SVG icons
 
-Put your `.svg` files in `src/assets/icons/`. Ground Zero automatically generates a sprite file and watches for changes during development.
+Put your `.svg` files in `src/assets/icons/`. Ground Zero automatically generates a sprite file and watches that folder for changes during development. If the folder does not exist yet, Ground Zero will start watching it as soon as you create it.
 
 To use icons in a template:
 
@@ -62,7 +62,7 @@ npm init -y
 npm install @nordskill/ground-zero
 
 # minimal structure
-mkdir -p src/pages src/partials src/assets/css src/assets/js
+mkdir -p src/pages src/partials src/assets/css src/assets/js src/assets/icons
 touch src/pages/index.ejs src/assets/css/main.css src/assets/js/main.js
 ```
 
@@ -71,13 +71,15 @@ Example `src/pages/index.ejs`:
 ```html
 <!DOCTYPE html>
 <html lang="en">
-  <%- include('partials/head') %>
+  <%- include('../partials/head') %>
   <body>
-    <%- include('partials/header') %>
+    <%- include('../partials/svg-sprite') %>
+    <%- include('../partials/header') %>
     <main>
       <h1>Hello from Ground Zero</h1>
     </main>
-    <%- include('partials/footer') %>
+    <%- include('../partials/footer') %>
+    <script type="module" src="<%= moduleEntry %>"></script>
   </body>
 </html>
 ```
@@ -101,12 +103,12 @@ npx gzero-build
 
 This command:
 1. Recompiles EJS → HTML.
-2. Runs `vite build` with the packaged config (multi-page aware).
+2. Compiles production HTML into a fresh temporary cache and runs `vite build` from there.
 3. Minifies every CSS file in `build/` using esbuild.
+4. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.
 
 ## License
 
 MIT © Ground Zero contributors.
-

@@ -229,9 +229,15 @@ export async function buildResponsiveImageManifest(config) {
             continue;
         }
 
-        const metadata = await sharp(sourcePath).metadata();
+        let metadata;
+        try {
+            metadata = await sharp(sourcePath).metadata();
+        } catch {
+            continue;
+        }
+
         if (!metadata.width || !metadata.height) {
-            throw new Error(`Unable to read image dimensions: ${sourcePath}`);
+            continue;
         }
 
         const relativeDir = dirname(relativePath);

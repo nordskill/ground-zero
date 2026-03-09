@@ -7,7 +7,7 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 - Zero setup: Vite config, BrowserSync, and file watching are bundled, so you only write templates and CSS.
 - Pure EJS + CSS: No React, no SCSS pipeline, just standard EJS partials and native CSS features.
 - Instant feedback: Vite's HMR keeps the browser in sync while BrowserSync mirrors clicks, scroll, and form inputs across devices.
-- Predictable builds: Every build runs `EJS -> Vite build -> responsive images -> asset copy -> CSS minify`, so what you preview is what you ship.
+- Predictable builds: Every build runs `EJS -> Vite build -> responsive images -> asset copy -> HTML minify -> CSS minify`, so what you preview is what you ship.
 
 ## Project structure
 
@@ -192,8 +192,9 @@ This command:
 6. Copies other static source assets such as icons, video, and PDFs into `build/assets/**`.
 7. Copies `public/**` through unchanged.
 8. Generates `build/sitemap.xml` and `build/robots.txt` from page metadata and `gzero.config.js`.
-9. Minifies every CSS file in `build/` using esbuild.
-10. Removes the temporary production HTML cache on success.
+9. Minifies every HTML file in `build/`.
+10. Minifies every CSS file in `build/` using esbuild.
+11. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.
 

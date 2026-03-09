@@ -35,7 +35,8 @@ try {
 }
 
 const configPath = pathResolve(PKG_ROOT, 'vite.config.js');
-const minifyScript = pathResolve(PKG_ROOT, 'scripts', 'minify-css.js');
+const minifyCssScript = pathResolve(PKG_ROOT, 'scripts', 'minify-css.js');
+const minifyHtmlScript = pathResolve(PKG_ROOT, 'scripts', 'minify-html.js');
 const tempRoot = pathResolve(process.cwd(), 'tmp');
 const buildHtmlRoot = pathResolve(process.cwd(), 'tmp', 'build-html');
 const buildRoot = pathResolve(process.cwd(), 'build');
@@ -92,9 +93,11 @@ function cleanupTempBuildHtml() {
     copySourceAssetsToBuild(buildAssetsRoot, { skipTopLevelDirs: ['images'] });
     await writeResponsiveImages(imageManifest, buildImagesRoot, imageConfig);
     await writeSitemapFiles(buildRoot);
-    await runNode([minifyScript]);
+    await runNode([minifyHtmlScript]);
+    await runNode([minifyCssScript]);
     cleanupTempBuildHtml();
 })().catch((err) => {
     console.error(err);
     process.exit(1);
 });
+

@@ -20,7 +20,9 @@
         "ejs": "node scripts/compile-ejs.js",
         "start": "node bin/gzero.js",
         "build": "node bin/gzero-build.js",
-        "minify-css": "node scripts/minify-css.js"
+        "minify-css": "node scripts/minify-css.js",
+        "minify-html": "node scripts/minify-html.js",
+        "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
     },
     "bin": {
         "gzero": "bin/gzero.js",
@@ -29,6 +31,7 @@
     "dependencies": {
         "ejs": "^5.0.1",
         "esbuild": "^0.27.3",
+        "html-minifier-terser": "^7.2.0",
         "sharp": "^0.34.5",
         "svgo": "^4.0.0",
         "vite": "^7.3.1",

@@ -3,7 +3,8 @@
  * ground-zero build CLI:
  * - Compiles EJS pages into an isolated production HTML cache
  * - Runs Vite build with packaged config
- * - Minifies CSS in build/
+ * - Copies static src/assets files into build/assets while Vite emits JS/CSS bundles there too
+ * - Generates responsive images from src/assets/images into build/assets/images
  * - Removes the temporary HTML cache after a successful build
  */
 import { spawn } from 'node:child_process';
@@ -11,6 +12,7 @@ import { readdirSync, rmSync } from 'node:fs';
 import { resolve as pathResolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { compileAll } from '../scripts/compile-ejs.js';
+import { copySourceAssetsToBuild } from '../scripts/assets.js';
 import {
     buildResponsiveImageManifest,
     loadImageConversionConfig,
@@ -21,7 +23,6 @@ const DIRNAME = import.meta.dirname;
 const PKG_ROOT = pathResolve(DIRNAME, '..');
 const require = createRequire(import.meta.url);
 
-// Resolve vite CLI entry via package.json to avoid blocked exports
 let viteBin = '';
 try {
     const vitePkgPath = require.resolve('vite/package.json');
@@ -35,13 +36,14 @@ const configPath = pathResolve(PKG_ROOT, 'vite.config.js');
 const minifyScript = pathResolve(PKG_ROOT, 'scripts', 'minify-css.js');
 const tempRoot = pathResolve(process.cwd(), 'tmp');
 const buildHtmlRoot = pathResolve(process.cwd(), 'tmp', 'build-html');
-const buildImagesRoot = pathResolve(process.cwd(), 'build', 'images');
+const buildAssetsRoot = pathResolve(process.cwd(), 'build', 'assets');
+const buildImagesRoot = pathResolve(buildAssetsRoot, 'images');
 
 /**
- * Spawn a Node.js process with the provided arguments.
- * @param {string[]} args - Arguments to pass to the Node executable.
- * @param {NodeJS.ProcessEnv} [env] - Extra environment variables for the child process.
- * @returns {Promise<void>} Resolves when the child exits with code 0.
+ * Spawn a Node.js subprocess and forward its stdio.
+ * @param {string[]} args - CLI arguments passed to `node`.
+ * @param {NodeJS.ProcessEnv} [env] - Optional environment overrides.
+ * @returns {Promise<void>} Resolves when the subprocess exits successfully.
  */
 function runNode(args, env) {
     return new Promise((resolve, reject) => {
@@ -58,8 +60,7 @@ function runNode(args, env) {
 }
 
 /**
- * Remove the temporary production HTML cache after a successful build.
- * Keeps the cache on failure to make post-mortem inspection possible.
+ * Remove the temporary HTML cache after a successful build.
  * @returns {void}
  */
 function cleanupTempBuildHtml() {
@@ -73,25 +74,20 @@ function cleanupTempBuildHtml() {
     }
 }
 
-/**
- * Execute the build pipeline: compile EJS, Vite build, CSS minification.
- * @returns {Promise<void>}
- */
 (async () => {
     const imageConfig = await loadImageConversionConfig();
     const imageManifest = await buildResponsiveImageManifest(imageConfig);
-    // Precompile EJS pages
+
     await compileAll(buildHtmlRoot, {
         responsiveImages: true,
         imageManifest,
         imageConfig
     });
-    // Build with Vite using packaged config
     await runNode([viteBin, 'build', '--config', configPath], {
         GZERO_HTML_ROOT: buildHtmlRoot
     });
+    copySourceAssetsToBuild(buildAssetsRoot, { skipTopLevelDirs: ['images'] });
     await writeResponsiveImages(imageManifest, buildImagesRoot, imageConfig);
-    // Minify CSS in build/
     await runNode([minifyScript]);
     cleanupTempBuildHtml();
 })().catch((err) => {

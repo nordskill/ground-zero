@@ -3,7 +3,6 @@ import {
     existsSync,
     mkdirSync,
     readdirSync,
-    rmSync,
     statSync
 } from 'node:fs';
 import {
@@ -87,9 +86,9 @@ const IMG_ATTR_RX = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))
  */
 
 /**
- * Keep image lookups scoped to src/assets/images.
- * @param {string} filePath
- * @returns {boolean}
+ * Check that a file path lives inside `src/assets/images`.
+ * @param {string} filePath - Absolute file path.
+ * @returns {boolean} `true` when the file is a source image.
  */
 function isSourceImagePath(filePath) {
     return filePath === SOURCE_IMAGES_DIR || filePath.startsWith(`${SOURCE_IMAGES_DIR}${sep}`);
@@ -97,17 +96,16 @@ function isSourceImagePath(filePath) {
 
 /**
  * Normalize Windows separators for URLs.
- * @param {string} value
- * @returns {string}
+ * @param {string} value - File path or URL fragment.
+ * @returns {string} URL-safe path.
  */
 function normalizeSlashes(value) {
     return value.replaceAll('\\', '/');
 }
 
 /**
- * Load image conversion options from project config.
- * Wrong values fail later in Sharp by design.
- * @returns {Promise<ResponsiveImageConfig>}
+ * Load image conversion settings from project config.
+ * @returns {Promise<ResponsiveImageConfig>} Effective responsive image config.
  */
 export async function loadImageConversionConfig() {
     /** @type {Record<string, unknown>} */
@@ -141,8 +139,8 @@ export async function loadImageConversionConfig() {
 
 /**
  * Recursively walk a directory and return all files.
- * @param {string} dir
- * @returns {string[]}
+ * @param {string} dir - Directory to scan.
+ * @returns {string[]} Absolute file paths.
  */
 function walkDir(dir) {
     /** @type {string[]} */
@@ -163,10 +161,10 @@ function walkDir(dir) {
 }
 
 /**
- * Avoid upscaling while preserving explicit configured widths.
- * @param {number} sourceWidth
- * @param {number[]} configuredSizes
- * @returns {number[]}
+ * Build responsive widths without upscaling.
+ * @param {number} sourceWidth - Original image width.
+ * @param {number[]} configuredSizes - Configured target widths.
+ * @returns {number[]} Output widths.
  */
 function buildVariantWidths(sourceWidth, configuredSizes) {
     /** @type {number[]} */
@@ -189,32 +187,23 @@ function buildVariantWidths(sourceWidth, configuredSizes) {
 }
 
 /**
- * Return the build output URL for a source image.
- * @param {string} relativePath
- * @returns {string}
+ * Return the production URL for a generated image asset.
+ * @param {string} relativePath - Path relative to `src/assets/images`.
+ * @returns {string} Public build URL.
  */
 function toBuildImageUrl(relativePath) {
-    return `/images/${normalizeSlashes(relativePath)}`;
+    return `/assets/images/${normalizeSlashes(relativePath)}`;
 }
 
 /**
- * Return the dev URL that Vite can serve straight from src/.
- * @param {string} sourcePath
- * @returns {string}
- */
-function toDevImageUrl(sourcePath) {
-    return `/@fs/${normalizeSlashes(sourcePath)}`;
-}
-
-/**
- * Build metadata needed to rewrite HTML and emit build assets.
- * Everything except SVG is treated as Sharp input.
- * @param {ResponsiveImageConfig} config
- * @returns {Promise<Map<string, ResponsiveImageEntry>>}
+ * Build metadata used to rewrite HTML and emit responsive images.
+ * @param {ResponsiveImageConfig} config - Effective image conversion config.
+ * @returns {Promise<Map<string, ResponsiveImageEntry>>} Source image manifest.
  */
 export async function buildResponsiveImageManifest(config) {
     /** @type {Map<string, ResponsiveImageEntry>} */
     const manifest = new Map();
+    if (!existsSync(SOURCE_IMAGES_DIR)) return manifest;
 
     for (const sourcePath of walkDir(SOURCE_IMAGES_DIR)) {
         const relativePath = normalizeSlashes(pathRelative(SOURCE_IMAGES_DIR, sourcePath));
@@ -279,8 +268,8 @@ export async function buildResponsiveImageManifest(config) {
 
 /**
  * Split a URL into path and suffix segments.
- * @param {string} src
- * @returns {{ path: string, suffix: string }}
+ * @param {string} src - Original URL.
+ * @returns {{ path: string, suffix: string }} Parsed URL parts.
  */
 function splitUrlSuffix(src) {
     const matchIndex = src.search(/[?#]/);
@@ -295,12 +284,12 @@ function splitUrlSuffix(src) {
 }
 
 /**
- * Resolve an authored img src into a file inside src/assets/images.
- * @param {string} src
- * @param {string} pageFileAbs
- * @returns {string}
+ * Resolve an authored `<img src>` into a file inside `src/assets/images`.
+ * Only the canonical `/assets/images/**` contract is supported.
+ * @param {string} src - Authored image source URL.
+ * @returns {string} Absolute source image path, or an empty string when unsupported.
  */
-function resolveSourceImagePath(src, pageFileAbs) {
+function resolveSourceImagePath(src) {
     if (!src) return '';
     if (/^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) {
         return '';
@@ -316,20 +305,16 @@ function resolveSourceImagePath(src, pageFileAbs) {
         decodedPath = path;
     }
 
-    let resolvedPath = '';
-    if (decodedPath.startsWith('/src/assets/images/')) {
-        resolvedPath = pathResolve(CWD, `.${decodedPath}`);
-    } else if (decodedPath.startsWith('src/assets/images/')) {
-        resolvedPath = pathResolve(CWD, decodedPath);
-    } else if (decodedPath.startsWith('/assets/images/')) {
-        resolvedPath = pathResolve(CWD, `src${decodedPath}`);
-    } else if (decodedPath.startsWith('assets/images/')) {
-        resolvedPath = pathResolve(CWD, 'src', decodedPath);
-    } else if (!decodedPath.startsWith('/')) {
-        resolvedPath = pathResolve(dirname(pageFileAbs), decodedPath);
-    }
+    const relativePath = decodedPath.startsWith('/assets/images/')
+        ? decodedPath.slice('/assets/images/'.length)
+        : decodedPath.startsWith('assets/images/')
+            ? decodedPath.slice('assets/images/'.length)
+            : '';
 
-    if (!resolvedPath || !existsSync(resolvedPath) || !isSourceImagePath(resolvedPath)) {
+    if (!relativePath) return '';
+
+    const resolvedPath = pathResolve(SOURCE_IMAGES_DIR, relativePath);
+    if (!existsSync(resolvedPath) || !isSourceImagePath(resolvedPath)) {
         return '';
     }
 
@@ -337,9 +322,9 @@ function resolveSourceImagePath(src, pageFileAbs) {
 }
 
 /**
- * Parse an img tag into ordered attributes.
- * @param {string} tag
- * @returns {ParsedImgAttribute[]}
+ * Parse an `<img>` tag into ordered attributes.
+ * @param {string} tag - Raw HTML tag.
+ * @returns {ParsedImgAttribute[]} Parsed attributes.
  */
 function parseImgAttributes(tag) {
     /** @type {ParsedImgAttribute[]} */
@@ -361,9 +346,9 @@ function parseImgAttributes(tag) {
 
 /**
  * Find an attribute case-insensitively.
- * @param {ParsedImgAttribute[]} attrs
- * @param {string} name
- * @returns {ParsedImgAttribute | undefined}
+ * @param {ParsedImgAttribute[]} attrs - Parsed attributes.
+ * @param {string} name - Attribute name.
+ * @returns {ParsedImgAttribute | undefined} Matching attribute.
  */
 function findAttr(attrs, name) {
     const lowerName = name.toLowerCase();
@@ -373,10 +358,10 @@ function findAttr(attrs, name) {
 }
 
 /**
- * Upsert an attribute while keeping original order stable.
- * @param {ParsedImgAttribute[]} attrs
- * @param {string} name
- * @param {string} value
+ * Insert or update an attribute while preserving order.
+ * @param {ParsedImgAttribute[]} attrs - Parsed attributes.
+ * @param {string} name - Attribute name.
+ * @param {string} value - Attribute value.
  * @returns {void}
  */
 function upsertAttr(attrs, name, value) {
@@ -390,10 +375,10 @@ function upsertAttr(attrs, name, value) {
 }
 
 /**
- * Serialize ordered attributes back into an img tag.
- * @param {ParsedImgAttribute[]} attrs
- * @param {boolean} selfClosing
- * @returns {string}
+ * Serialize parsed attributes back to an `<img>` tag.
+ * @param {ParsedImgAttribute[]} attrs - Parsed attributes.
+ * @param {boolean} selfClosing - Whether the original tag was self-closing.
+ * @returns {string} Serialized tag.
  */
 function serializeImgTag(attrs, selfClosing) {
     /** @type {string[]} */
@@ -418,33 +403,31 @@ function serializeImgTag(attrs, selfClosing) {
 }
 
 /**
- * Rewrite local source images for dev or build output.
- * @param {string} html
- * @param {string} pageFileAbs
+ * Rewrite image tags for production responsive output.
+ * @param {string} html - Rendered HTML.
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, ResponsiveImageEntry>,
  *   imageConfig?: ResponsiveImageConfig
- * }} [options]
- * @returns {string}
+ * }} [options] - Build-time image options.
+ * @returns {string} HTML with responsive image attributes applied.
  */
-export function transformHtmlImages(html, pageFileAbs, options = {}) {
+export function transformHtmlImages(html, options = {}) {
     const responsiveImages = Boolean(options.responsiveImages);
     const imageManifest = options.imageManifest;
     const injectIntrinsicSize = options.imageConfig?.injectIntrinsicSize !== false;
+
+    if (!responsiveImages || !imageManifest) {
+        return html;
+    }
 
     return html.replace(IMG_TAG_RX, (tag) => {
         const attrs = parseImgAttributes(tag);
         const srcAttr = findAttr(attrs, 'src');
         if (!srcAttr || srcAttr.value === null) return tag;
 
-        const sourcePath = resolveSourceImagePath(srcAttr.value, pageFileAbs);
+        const sourcePath = resolveSourceImagePath(srcAttr.value);
         if (!sourcePath) return tag;
-
-        if (!responsiveImages || !imageManifest) {
-            upsertAttr(attrs, 'src', `${toDevImageUrl(sourcePath)}${splitUrlSuffix(srcAttr.value).suffix}`);
-            return serializeImgTag(attrs, tag.endsWith('/>'));
-        }
 
         const entry = imageManifest.get(sourcePath);
         if (!entry) return tag;
@@ -473,15 +456,15 @@ export function transformHtmlImages(html, pageFileAbs, options = {}) {
 }
 
 /**
- * Emit responsive images into build/images.
- * @param {Map<string, ResponsiveImageEntry>} manifest
- * @param {string} outDir
- * @param {ResponsiveImageConfig} config
+ * Emit responsive image files into `build/assets/images`.
+ * @param {Map<string, ResponsiveImageEntry>} manifest - Source image manifest.
+ * @param {string} outDir - Absolute output directory.
+ * @param {ResponsiveImageConfig} config - Effective image conversion config.
  * @returns {Promise<void>}
  */
 export async function writeResponsiveImages(manifest, outDir, config) {
-    rmSync(outDir, { recursive: true, force: true });
     if (manifest.size === 0) return;
+    mkdirSync(outDir, { recursive: true });
 
     for (const entry of manifest.values()) {
         const relativeSourcePath = normalizeSlashes(pathRelative(CWD, entry.sourcePath));

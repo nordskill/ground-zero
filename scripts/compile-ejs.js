@@ -6,7 +6,6 @@ import ejs from 'ejs';
 import { generateSvgSprite } from './svg-sprite.js';
 import { transformHtmlImages } from './responsive-images.js';
 
-// Base paths
 const CWD = process.cwd();
 const PAGES_DIR = join(CWD, 'src/pages');
 const PARTIALS_DIR = join(CWD, 'src/partials');
@@ -14,16 +13,13 @@ const DEV_OUT_DIR = join(CWD, 'dev-html');
 const ICONS_DIR = join(CWD, 'src/assets/icons');
 const SPRITE_PARTIAL = join(CWD, 'src/partials/svg-sprite.ejs');
 
-// Use Vite's /@fs/ to load modules from outside the dev server root (dev-html/)
 const MODULE_ENTRY_ABS = join(CWD, 'src/assets/js/main.js');
 const MODULE_ENTRY = `/@fs/${MODULE_ENTRY_ABS.replaceAll('\\', '/')}`;
 
 /**
- * Strip EJS comments (<%# ... %>) with support for nested tags.
- * Allows using <%- include(...) %> inside comments.
- * Preserves line numbers by keeping newlines.
- * @param {string} str - Template content
- * @returns {string} Content with comments removed
+ * Strip EJS comments (<%# ... %>) while preserving line count.
+ * @param {string} str - Template content.
+ * @returns {string} Content with comments removed.
  */
 function stripEjsComments(str) {
     let out = '';
@@ -32,24 +28,17 @@ function stripEjsComments(str) {
     while (i < len) {
         if (str.startsWith('<%#', i)) {
             let depth = 1;
-            i += 3; // Skip start tag
+            i += 3;
             while (i < len && depth > 0) {
-                // Check for literal escape <%% - ignore it
                 if (str.startsWith('<%%', i)) {
                     i += 3;
-                }
-                // Check for opening tags <% (including variants)
-                else if (str.startsWith('<%', i)) {
+                } else if (str.startsWith('<%', i)) {
                     depth++;
                     i += 2;
-                }
-                // Check for closing tags %> (including variants like -%>, _%>)
-                // Since all end with %>, we just look for that.
-                else if (str.startsWith('%>', i)) {
+                } else if (str.startsWith('%>', i)) {
                     depth--;
                     i += 2;
                 } else {
-                    // Preserve newlines to maintain line numbers in source maps
                     if (str[i] === '\n') {
                         out += '\n';
                     }
@@ -65,22 +54,21 @@ function stripEjsComments(str) {
 }
 
 /**
- * Read file and strip EJS comments
- * @param {string} filePath
- * @returns {string}
+ * Read an EJS file and strip supported EJS comment blocks.
+ * @param {string} filePath - Absolute path to the file.
+ * @returns {string} File contents without EJS comments.
  */
 function readEjsFile(filePath) {
     const content = readFileSync(filePath, 'utf8');
     return stripEjsComments(content);
 }
 
-// Override EJS file loader to support custom comment stripping in includes
 ejs.fileLoader = readEjsFile;
 
 /**
- * Recursively walk directory and find all .ejs files
- * @param {string} dir - Directory path to walk
- * @returns {string[]} Array of absolute paths to .ejs files
+ * Recursively walk a directory and collect `.ejs` files.
+ * @param {string} dir - Directory to scan.
+ * @returns {string[]} Absolute EJS file paths.
  */
 function walkDir(dir) {
     /** @type {string[]} */
@@ -96,8 +84,8 @@ function walkDir(dir) {
 }
 
 /**
- * Read all partial files and return a map of partial names to content
- * @returns {Record<string, string>} Map of partial names to their content
+ * Read all partials under `src/partials`.
+ * @returns {Record<string, string>} Partial name to file content map.
  */
 function readPartials() {
     /** @type {Record<string, string>} */
@@ -111,26 +99,24 @@ function readPartials() {
 }
 
 /**
- * Resolve include path relative to the including file
- * @param {string} fromFile - Path to the file that includes
- * @param {string} includePath - Relative path to the included file
- * @returns {string} Resolved absolute path
+ * Resolve an include path relative to the file that includes it.
+ * @param {string} fromFile - File containing the include.
+ * @param {string} includePath - Include path from the template.
+ * @returns {string} Absolute resolved path.
  */
 function resolveInclude(fromFile, includePath) {
-    // Resolve relative to including file; add .ejs extension if omitted
     const base = pathResolve(dirname(fromFile), includePath);
     if (extname(base) === '.ejs') return base;
     const withExt = `${base}.ejs`;
     if (existsSync(withExt)) return withExt;
-    // Fallback to base if it already exists as-is
     if (existsSync(base)) return base;
     return withExt;
 }
 
 /**
- * Scan EJS file for include() calls and return set of included file paths
- * @param {string} filePath - Path to the EJS file to scan
- * @returns {Set<string>} Set of absolute paths to included files
+ * Scan an EJS file and collect its include dependencies.
+ * @param {string} filePath - Absolute path to the EJS file.
+ * @returns {Set<string>} Absolute paths of included partials.
  */
 function scanIncludes(filePath) {
     const src = readEjsFile(filePath);
@@ -147,12 +133,13 @@ function scanIncludes(filePath) {
 }
 
 /**
- * Build a dependency graph of EJS files:
- * - pages: Set of absolute page files
- * - partials: Set of absolute partial files
- * - includes: Map(src -> Set(dst))
- * - dependents: Map(dst -> Set(src)) reverse edges (used to find impacted pages)
- * @returns {Promise<{pages: Set<string>, partials: Set<string>, includes: Map<string, Set<string>>, dependents: Map<string, Set<string>>}>}
+ * Build the include dependency graph for pages and partials.
+ * @returns {Promise<{
+ *   pages: Set<string>,
+ *   partials: Set<string>,
+ *   includes: Map<string, Set<string>>,
+ *   dependents: Map<string, Set<string>>
+ * }>} Graph data used for incremental rebuilds.
  */
 export async function buildDependencyGraph() {
     const pages = new Set(walkDir(PAGES_DIR));
@@ -167,9 +154,9 @@ export async function buildDependencyGraph() {
     for (const file of universe) {
         const incs = scanIncludes(file);
         includes.set(file, incs);
-        for (const t of incs) {
-            if (!dependents.has(t)) dependents.set(t, new Set());
-            const deps = dependents.get(t);
+        for (const target of incs) {
+            if (!dependents.has(target)) dependents.set(target, new Set());
+            const deps = dependents.get(target);
             if (deps) deps.add(file);
         }
     }
@@ -178,10 +165,15 @@ export async function buildDependencyGraph() {
 }
 
 /**
- * Get all pages impacted by changes to given files
- * @param {string[]} changedPaths - Array of changed file paths (relative or absolute)
- * @param {{pages: Set<string>, partials: Set<string>, includes: Map<string, Set<string>>, dependents: Map<string, Set<string>>}} graph - Dependency graph
- * @returns {Set<string>} Set of absolute paths to impacted pages
+ * Find all pages impacted by a set of changed files.
+ * @param {string[]} changedPaths - Changed file paths, relative or absolute.
+ * @param {{
+ *   pages: Set<string>,
+ *   partials: Set<string>,
+ *   includes: Map<string, Set<string>>,
+ *   dependents: Map<string, Set<string>>
+ * }} graph - Dependency graph returned by `buildDependencyGraph()`.
+ * @returns {Set<string>} Absolute page paths that should be rebuilt.
  */
 export function getImpactedPages(changedPaths, graph) {
     /** @type {Set<string>} */
@@ -191,7 +183,6 @@ export function getImpactedPages(changedPaths, graph) {
     /** @type {string[]} */
     const stack = [];
 
-    // Normalize to absolute paths
     for (const p of changedPaths) {
         const abs = pathResolve(CWD, p);
         stack.push(abs);
@@ -202,16 +193,12 @@ export function getImpactedPages(changedPaths, graph) {
         if (!cur || seen.has(cur)) continue;
         seen.add(cur);
 
-        // If a page changed directly, include it
         if (graph.pages.has(cur)) result.add(cur);
 
-        // Traverse reverse edges to find higher-level dependents (pages or partials)
-        /** @type {Set<string> | undefined} */
         const ups = graph.dependents.get(cur);
         if (ups) {
             for (const u of ups) {
                 if (graph.pages.has(u)) result.add(u);
-                // Keep walking up to cover partials included by other partials
                 if (!seen.has(u)) stack.push(u);
             }
         }
@@ -222,16 +209,16 @@ export function getImpactedPages(changedPaths, graph) {
 
 /**
  * Resolve the output directory for compiled HTML.
- * @param {string | undefined} outDir
- * @returns {string}
+ * @param {string | undefined} outDir - Optional explicit output directory.
+ * @returns {string} Absolute output directory path.
  */
 function getOutDir(outDir) {
     return outDir ? pathResolve(CWD, outDir) : DEV_OUT_DIR;
 }
 
 /**
- * Ensure the output directory exists.
- * @param {string} outDir
+ * Ensure that the HTML output directory exists.
+ * @param {string} outDir - Absolute output directory.
  * @returns {void}
  */
 function ensureOutDir(outDir) {
@@ -239,8 +226,8 @@ function ensureOutDir(outDir) {
 }
 
 /**
- * Remove the compiled HTML output directory before a full rebuild.
- * @param {string} outDir
+ * Reset the compiled HTML output directory before a full rebuild.
+ * @param {string} outDir - Absolute output directory.
  * @returns {void}
  */
 function resetOutDir(outDir) {
@@ -249,15 +236,16 @@ function resetOutDir(outDir) {
 }
 
 /**
- * Compile a single EJS page with partials
- * @param {string} pageFileAbs - Absolute path to the page file
- * @param {Record<string, string>} partials - Map of partial names to content
- * @param {string} outDir - Absolute path to the compiled HTML output directory
+ * Compile a single EJS page using the current partial set.
+ * @param {string} pageFileAbs - Absolute page path.
+ * @param {Record<string, string>} partials - Partial map from `readPartials()`.
+ * @param {string} outDir - Absolute HTML output directory.
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
  *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
- * }} [options]
+ * }} [options] - Optional build-time image transform settings.
+ * @returns {void}
  */
 function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
     if (!existsSync(pageFileAbs)) return;
@@ -267,8 +255,7 @@ function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
         { partials, moduleEntry: MODULE_ENTRY },
         { root: PAGES_DIR, filename: pageFileAbs }
     );
-    const html = transformHtmlImages(renderedHtml, pageFileAbs, options);
-    // Preserve directory structure relative to pages dir
+    const html = transformHtmlImages(renderedHtml, options);
     const rel = pathRelative(PAGES_DIR, pageFileAbs).replace(/\.ejs$/, '.html');
     const outPath = join(outDir, rel);
     const pageOutDir = dirname(outPath);
@@ -278,14 +265,14 @@ function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
 }
 
 /**
- * Compile a single EJS page
- * @param {string} pageFileAbs - Absolute path to the page file
- * @param {string} [outDir] - HTML output directory; defaults to dev-html/
+ * Compile one EJS page to HTML.
+ * @param {string} pageFileAbs - Absolute page path.
+ * @param {string} [outDir] - Optional output directory, defaults to `dev-html/`.
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
  *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
- * }} [options]
+ * }} [options] - Optional build-time image transform settings.
  * @returns {Promise<void>}
  */
 export async function compilePage(pageFileAbs, outDir, options) {
@@ -296,18 +283,17 @@ export async function compilePage(pageFileAbs, outDir, options) {
 }
 
 /**
- * Compile all EJS pages
- * @param {string} [outDir] - HTML output directory; defaults to dev-html/
+ * Compile all EJS pages to HTML.
+ * @param {string} [outDir] - Optional output directory, defaults to `dev-html/`.
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
  *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
- * }} [options]
+ * }} [options] - Optional build-time image transform settings.
  * @returns {Promise<void>}
  */
 export async function compileAll(outDir, options) {
     const targetOutDir = getOutDir(outDir);
-    // Ensure the SVG sprite partial is up-to-date before compiling pages
     await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
     resetOutDir(targetOutDir);
     const partials = readPartials();
@@ -317,7 +303,6 @@ export async function compileAll(outDir, options) {
     }
 }
 
-// CLI entry: `node scripts/compile-ejs.js`
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     compileAll().catch((err) => {
         console.error(err);

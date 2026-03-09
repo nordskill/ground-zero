@@ -5,6 +5,7 @@
  * - Runs Vite build with packaged config
  * - Copies static src/assets files into build/assets while Vite emits JS/CSS bundles there too
  * - Generates responsive images from src/assets/images into build/assets/images
+ * - Generates sitemap.xml and robots.txt from src/pages metadata
  * - Removes the temporary HTML cache after a successful build
  */
 import { spawn } from 'node:child_process';
@@ -18,6 +19,7 @@ import {
     loadImageConversionConfig,
     writeResponsiveImages
 } from '../scripts/responsive-images.js';
+import { writeSitemapFiles } from '../scripts/sitemap.js';
 
 const DIRNAME = import.meta.dirname;
 const PKG_ROOT = pathResolve(DIRNAME, '..');
@@ -36,6 +38,7 @@ const configPath = pathResolve(PKG_ROOT, 'vite.config.js');
 const minifyScript = pathResolve(PKG_ROOT, 'scripts', 'minify-css.js');
 const tempRoot = pathResolve(process.cwd(), 'tmp');
 const buildHtmlRoot = pathResolve(process.cwd(), 'tmp', 'build-html');
+const buildRoot = pathResolve(process.cwd(), 'build');
 const buildAssetsRoot = pathResolve(process.cwd(), 'build', 'assets');
 const buildImagesRoot = pathResolve(buildAssetsRoot, 'images');
 
@@ -88,6 +91,7 @@ function cleanupTempBuildHtml() {
     });
     copySourceAssetsToBuild(buildAssetsRoot, { skipTopLevelDirs: ['images'] });
     await writeResponsiveImages(imageManifest, buildImagesRoot, imageConfig);
+    await writeSitemapFiles(buildRoot);
     await runNode([minifyScript]);
     cleanupTempBuildHtml();
 })().catch((err) => {

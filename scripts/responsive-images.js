@@ -14,17 +14,11 @@ import {
     resolve as pathResolve,
     sep
 } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import sharp from 'sharp';
+import { loadProjectConfig } from './project-config.js';
 
 const CWD = process.cwd();
 const SOURCE_IMAGES_DIR = pathResolve(CWD, 'src/assets/images');
-const CONFIG_FILES = [
-    'gzero.config.js',
-    'gzero.config.mjs',
-    'ground-zero.config.js',
-    'ground-zero.config.mjs'
-];
 /** @type {Readonly<ResponsiveImageConfig>} */
 const DEFAULT_IMAGE_CONVERSION_CONFIG = Object.freeze({
     /** @type {keyof import('sharp').FormatEnum} */
@@ -108,18 +102,7 @@ function normalizeSlashes(value) {
  * @returns {Promise<ResponsiveImageConfig>} Effective responsive image config.
  */
 export async function loadImageConversionConfig() {
-    /** @type {Record<string, unknown>} */
-    let userConfig = {};
-
-    for (const configName of CONFIG_FILES) {
-        const configPath = pathResolve(CWD, configName);
-        if (!existsSync(configPath)) continue;
-        const configModule = /** @type {{ default?: Record<string, unknown> }} */ (
-            await import(`${pathToFileURL(configPath).href}?ts=${Date.now()}`)
-        );
-        userConfig = configModule.default ?? configModule;
-        break;
-    }
+    const userConfig = await loadProjectConfig();
 
     const imageConfig = /** @type {{
         format?: keyof import('sharp').FormatEnum,

@@ -15,7 +15,7 @@ Ground Zero expects three folders and one config file:
 
 - **`src/pages/`** — Your EJS templates. Each `.ejs` file here becomes an `.html` page.
 - **`src/assets/`** — Images, CSS, JS, icons, video, PDFs, and anything else your site needs. In templates, reference these files with `/assets/` URLs (e.g. `/assets/images/me.jpg`). During a production build they end up in `build/assets/`.
-- **`public/`** — Files that should appear at the root of your site exactly as-is, like `favicon.ico`, `robots.txt`, or `manifest.webmanifest`.
+- **`public/`** — Files that should appear at the root of your site exactly as-is, like `favicon.ico` or `manifest.webmanifest`. Do not put a `robots.txt` here — the build generates one automatically.
 - **`gzero.config.js`** — Project-level settings (see Responsive images below).
 
 There is also a special template variable called `moduleEntry`. It points to `src/assets/js/main.js` so Vite can bundle your JavaScript. Use it in a template like this:
@@ -55,6 +55,55 @@ export default {
     }
 };
 ```
+
+## Sitemap and robots.txt
+
+When you build for production, Ground Zero automatically generates `build/sitemap.xml` and `build/robots.txt` from your pages and config. Set `siteUrl` in `gzero.config.js` to activate this:
+
+```js
+export default {
+    siteUrl: 'https://example.com',
+    sitemap: {
+        defaults: {
+            changefreq: 'monthly',
+            priority: 0.5
+        }
+    },
+    robots: {
+        disallow: ['/admin']
+    }
+};
+```
+
+Every `.ejs` file in `src/pages/` gets a sitemap entry. The URL is derived from the file path:
+
+- `src/pages/index.ejs` → `/`
+- `src/pages/about.ejs` → `/about`
+- `src/pages/blog/index.ejs` → `/blog/`
+- `src/pages/blog/post.ejs` → `/blog/post`
+
+### Per-page sitemap metadata
+
+To override defaults or exclude a page from the sitemap, add a `@ground-zero-sitemap` block inside an EJS comment at the top of the template:
+
+```ejs
+<%#
+@ground-zero-sitemap
+{
+    "changefreq": "weekly",
+    "priority": 1,
+    "exclude": false
+}
+%>
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `changefreq` | string | One of `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, `never` |
+| `priority` | number | Between `0.0` and `1.0` |
+| `exclude` | boolean | Set to `true` to omit this page from the sitemap entirely |
+
+Fields not set in the block fall back to `sitemap.defaults` from `gzero.config.js`.
 
 ## EJS comments
 
@@ -142,8 +191,9 @@ This command:
 5. Writes responsive image output to `build/assets/images`.
 6. Copies other static source assets such as icons, video, and PDFs into `build/assets/**`.
 7. Copies `public/**` through unchanged.
-8. Minifies every CSS file in `build/` using esbuild.
-9. Removes the temporary production HTML cache on success.
+8. Generates `build/sitemap.xml` and `build/robots.txt` from page metadata and `gzero.config.js`.
+9. Minifies every CSS file in `build/` using esbuild.
+10. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.
 

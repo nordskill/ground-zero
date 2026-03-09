@@ -98,3 +98,10 @@ footer {
 #icon-settings {
     fill: lime;
 }
+
+.test_img {
+    display: block;
+    margin-top: 20px;
+    width: 500px;
+    height: auto;
+}   

@@ -15,6 +15,7 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 | --- | --- |
 | **EJS pages** | Files under `src/pages/**/*.ejs` compile into matching `.html` pages for development and production. |
 | **Module entry** | `src/assets/js/main.js` is exposed to templates as `moduleEntry`. Add `<script type="module" src="<%= moduleEntry %>"></script>` to pages that need JS. |
+| **Responsive images** | Drop source images into `src/assets/images/`, author a plain `<img>` tag, and Ground Zero rewrites it into a responsive `srcset` image during production builds. |
 | **One-click commands** | `gzero` runs the dev loop (compile + Vite serve). `gzero-build` compiles, then minifies CSS with esbuild. |
 | **Modern CSS** | Write plain `.css` files that use nesting, layers, imports, and variables—Vite handles the rest. |
 
@@ -62,7 +63,7 @@ npm init -y
 npm install @nordskill/ground-zero
 
 # minimal structure
-mkdir -p src/pages src/partials src/assets/css src/assets/js src/assets/icons
+mkdir -p src/pages src/partials src/assets/css src/assets/js src/assets/icons src/assets/images
 touch src/pages/index.ejs src/assets/css/main.css src/assets/js/main.js
 ```
 
@@ -104,10 +105,51 @@ npx gzero-build
 This command:
 1. Recompiles EJS → HTML.
 2. Compiles production HTML into a fresh temporary cache and runs `vite build` from there.
-3. Minifies every CSS file in `build/` using esbuild.
-4. Removes the temporary production HTML cache on success.
+3. Converts `src/assets/images/` into responsive assets in `build/images/`.
+4. Minifies every CSS file in `build/` using esbuild.
+5. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.
+
+## Responsive images
+
+Author plain image tags in EJS and point `src` at a file inside `src/assets/images/`:
+
+```html
+<img src="/src/assets/images/me.jpg" alt="Photo of me" />
+```
+
+If you need a specific `sizes` value, write it on the tag yourself and Ground Zero will preserve it:
+
+```html
+<img
+    src="/src/assets/images/me.jpg"
+    alt="Photo of me"
+    sizes="(max-width: 768px) 100vw, 500px"
+/>
+```
+
+Image conversion settings live in `gzero.config.js` at the project root.
+Example config:
+
+```js
+export default {
+    imageConversion: {
+        format: 'avif',
+        sizes: [480, 960, 1440],
+        injectIntrinsicSize: true
+    }
+};
+```
+
+Notes:
+
+- `format` is passed directly to Sharp.
+- `quality` is optional; if omitted, Sharp uses its own default.
+- `sizes` is an array of target widths; Ground Zero also keeps the original width when needed to avoid upscaling.
+- `sizes` is not auto-generated. If you omit it, the output tag omits it too.
+- `injectIntrinsicSize` controls whether Ground Zero adds intrinsic `width` and `height` attributes to the output image tag.
+- `svg` files are copied through to `build/images/` without responsive conversion.
 
 ## License
 

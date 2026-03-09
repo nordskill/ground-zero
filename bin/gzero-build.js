@@ -11,6 +11,11 @@ import { readdirSync, rmSync } from 'node:fs';
 import { resolve as pathResolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { compileAll } from '../scripts/compile-ejs.js';
+import {
+    buildResponsiveImageManifest,
+    loadImageConversionConfig,
+    writeResponsiveImages
+} from '../scripts/responsive-images.js';
 
 const DIRNAME = import.meta.dirname;
 const PKG_ROOT = pathResolve(DIRNAME, '..');
@@ -30,6 +35,7 @@ const configPath = pathResolve(PKG_ROOT, 'vite.config.js');
 const minifyScript = pathResolve(PKG_ROOT, 'scripts', 'minify-css.js');
 const tempRoot = pathResolve(process.cwd(), 'tmp');
 const buildHtmlRoot = pathResolve(process.cwd(), 'tmp', 'build-html');
+const buildImagesRoot = pathResolve(process.cwd(), 'build', 'images');
 
 /**
  * Spawn a Node.js process with the provided arguments.
@@ -72,12 +78,19 @@ function cleanupTempBuildHtml() {
  * @returns {Promise<void>}
  */
 (async () => {
+    const imageConfig = await loadImageConversionConfig();
+    const imageManifest = await buildResponsiveImageManifest(imageConfig);
     // Precompile EJS pages
-    await compileAll(buildHtmlRoot);
+    await compileAll(buildHtmlRoot, {
+        responsiveImages: true,
+        imageManifest,
+        imageConfig
+    });
     // Build with Vite using packaged config
     await runNode([viteBin, 'build', '--config', configPath], {
         GZERO_HTML_ROOT: buildHtmlRoot
     });
+    await writeResponsiveImages(imageManifest, buildImagesRoot, imageConfig);
     // Minify CSS in build/
     await runNode([minifyScript]);
     cleanupTempBuildHtml();

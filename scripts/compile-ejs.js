@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 // @ts-ignore - ejs doesn't have type definitions
 import ejs from 'ejs';
 import { generateSvgSprite } from './svg-sprite.js';
+import { transformHtmlImages } from './responsive-images.js';
 
 // Base paths
 const CWD = process.cwd();
@@ -252,15 +253,21 @@ function resetOutDir(outDir) {
  * @param {string} pageFileAbs - Absolute path to the page file
  * @param {Record<string, string>} partials - Map of partial names to content
  * @param {string} outDir - Absolute path to the compiled HTML output directory
+ * @param {{
+ *   responsiveImages?: boolean,
+ *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ * }} [options]
  */
-function compilePageWithPartials(pageFileAbs, partials, outDir) {
+function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
     if (!existsSync(pageFileAbs)) return;
     const template = readEjsFile(pageFileAbs);
-    const html = ejs.render(
+    const renderedHtml = ejs.render(
         template,
         { partials, moduleEntry: MODULE_ENTRY },
         { root: PAGES_DIR, filename: pageFileAbs }
     );
+    const html = transformHtmlImages(renderedHtml, pageFileAbs, options);
     // Preserve directory structure relative to pages dir
     const rel = pathRelative(PAGES_DIR, pageFileAbs).replace(/\.ejs$/, '.html');
     const outPath = join(outDir, rel);
@@ -274,21 +281,31 @@ function compilePageWithPartials(pageFileAbs, partials, outDir) {
  * Compile a single EJS page
  * @param {string} pageFileAbs - Absolute path to the page file
  * @param {string} [outDir] - HTML output directory; defaults to dev-html/
+ * @param {{
+ *   responsiveImages?: boolean,
+ *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ * }} [options]
  * @returns {Promise<void>}
  */
-export async function compilePage(pageFileAbs, outDir) {
+export async function compilePage(pageFileAbs, outDir, options) {
     const targetOutDir = getOutDir(outDir);
     ensureOutDir(targetOutDir);
     const partials = readPartials();
-    compilePageWithPartials(pageFileAbs, partials, targetOutDir);
+    compilePageWithPartials(pageFileAbs, partials, targetOutDir, options);
 }
 
 /**
  * Compile all EJS pages
  * @param {string} [outDir] - HTML output directory; defaults to dev-html/
+ * @param {{
+ *   responsiveImages?: boolean,
+ *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ * }} [options]
  * @returns {Promise<void>}
  */
-export async function compileAll(outDir) {
+export async function compileAll(outDir, options) {
     const targetOutDir = getOutDir(outDir);
     // Ensure the SVG sprite partial is up-to-date before compiling pages
     await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
@@ -296,12 +313,12 @@ export async function compileAll(outDir) {
     const partials = readPartials();
     const pages = walkDir(PAGES_DIR);
     for (const page of pages) {
-        compilePageWithPartials(page, partials, targetOutDir);
+        compilePageWithPartials(page, partials, targetOutDir, options);
     }
 }
 
 // CLI entry: `node scripts/compile-ejs.js`
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     compileAll().catch((err) => {
         console.error(err);
         process.exitCode = 1;

@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import { join, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import { loadProjectConfig } from './project-config.js';
+import { assertNoPageOutputCollisions, getPagePathInfo } from './page-paths.js';
 
 const CWD = process.cwd();
 const PAGES_DIR = pathResolve(CWD, 'src/pages');
@@ -197,7 +198,7 @@ async function loadSitemapBuildConfig() {
             changefreq: defaults.changefreq ?? 'monthly',
             priority: defaults.priority ?? 0.5
         },
-        robotsDisallow: rawRobotsDisallow?.map((entry) => entry.trim()) ?? ['/*.html.md$']
+        robotsDisallow: rawRobotsDisallow?.map((entry) => entry.trim()) ?? ['/*.md$']
     };
 }
 
@@ -233,18 +234,7 @@ function walkPageFiles(dir) {
  * @returns {string} Public route path.
  */
 function getPageRoute(pageFile) {
-    const relativePath = normalizeSlashes(pathRelative(PAGES_DIR, pageFile));
-    const routePath = relativePath.replace(/\.ejs$/i, '');
-
-    if (routePath === 'index') {
-        return '/';
-    }
-
-    if (routePath.endsWith('/index')) {
-        return encodeURI(`/${routePath.slice(0, -'/index'.length)}/`);
-    }
-
-    return encodeURI(`/${routePath}`);
+    return getPagePathInfo(PAGES_DIR, pageFile).route;
 }
 
 /**
@@ -318,6 +308,7 @@ function buildSitemapEntries(config) {
 
         return leftRoute.localeCompare(rightRoute);
     });
+    assertNoPageOutputCollisions(PAGES_DIR, pageFiles);
     /** @type {Array<{ loc: string, lastmod: string, changefreq: SitemapChangefreq, priority: number }>} */
     const entries = [];
 

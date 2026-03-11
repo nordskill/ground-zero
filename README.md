@@ -13,7 +13,7 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 
 Ground Zero expects three folders and one config file:
 
-- **`src/pages/`** — Your EJS templates. Each `.ejs` file here becomes an `.html` page.
+- **`src/pages/`** — Your EJS templates. Each `.ejs` file here becomes a clean-URL page (e.g. `about.ejs` → `/about/`).
 - **`src/assets/`** — Images, CSS, JS, icons, video, PDFs, and anything else your site needs. In templates, reference these files with `/assets/` URLs (e.g. `/assets/images/me.jpg`). During a production build they end up in `build/assets/`.
 - **`public/`** — Files that should appear at the root of your site exactly as-is, like `favicon.ico` or `manifest.webmanifest`. Do not put a `robots.txt` here — the build generates one automatically.
 - **`gzero.config.js`** — Project-level settings (see Responsive images below).
@@ -78,9 +78,9 @@ export default {
 Every `.ejs` file in `src/pages/` gets a sitemap entry. The URL is derived from the file path:
 
 - `src/pages/index.ejs` → `/`
-- `src/pages/about.ejs` → `/about`
+- `src/pages/about.ejs` → `/about/`
 - `src/pages/blog/index.ejs` → `/blog/`
-- `src/pages/blog/post.ejs` → `/blog/post`
+- `src/pages/blog/post.ejs` → `/blog/post/`
 
 ### Per-page sitemap metadata
 

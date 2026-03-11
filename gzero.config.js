@@ -13,6 +13,6 @@ export default {
         }
     },
     robots: {
-        disallow: ['/*.html.md$']
+        disallow: ['/*.md$']
     }
 };

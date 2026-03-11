@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import ejs from 'ejs';
 import { generateSvgSprite } from './svg-sprite.js';
 import { transformHtmlImages } from './responsive-images.js';
+import { assertNoPageOutputCollisions, getPagePathInfo } from './page-paths.js';
 
 const CWD = process.cwd();
 const PAGES_DIR = join(CWD, 'src/pages');
@@ -256,8 +257,8 @@ function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
         { root: PAGES_DIR, filename: pageFileAbs }
     );
     const html = transformHtmlImages(renderedHtml, options);
-    const rel = pathRelative(PAGES_DIR, pageFileAbs).replace(/\.ejs$/, '.html');
-    const outPath = join(outDir, rel);
+    const pageInfo = getPagePathInfo(PAGES_DIR, pageFileAbs);
+    const outPath = join(outDir, pageInfo.outputRelativePath);
     const pageOutDir = dirname(outPath);
     mkdirSync(pageOutDir, { recursive: true });
     writeFileSync(outPath, html);
@@ -279,6 +280,7 @@ export async function compilePage(pageFileAbs, outDir, options) {
     const targetOutDir = getOutDir(outDir);
     ensureOutDir(targetOutDir);
     const partials = readPartials();
+    assertNoPageOutputCollisions(PAGES_DIR, walkDir(PAGES_DIR));
     compilePageWithPartials(pageFileAbs, partials, targetOutDir, options);
 }
 
@@ -298,6 +300,7 @@ export async function compileAll(outDir, options) {
     resetOutDir(targetOutDir);
     const partials = readPartials();
     const pages = walkDir(PAGES_DIR);
+    assertNoPageOutputCollisions(PAGES_DIR, pages);
     for (const page of pages) {
         compilePageWithPartials(page, partials, targetOutDir, options);
     }

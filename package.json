@@ -47,5 +47,8 @@
     "homepage": "https://github.com/nordskill/ground-zero#readme",
     "engines": {
         "node": ">=22"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.3"
     }
 }

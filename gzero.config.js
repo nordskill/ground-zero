@@ -6,6 +6,11 @@ export default {
         sizes: [480, 960, 1440],
         injectIntrinsicSize: true
     },
+    pageScaling: {
+        enabled: false,
+        minWidth: 1920,
+        precision: 2
+    },
     sitemap: {
         defaults: {
             changefreq: 'monthly',

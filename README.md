@@ -56,6 +56,34 @@ export default {
 };
 ```
 
+## Page scaling
+
+### Problem
+On UltraHD, 4K, and larger screens, pixel-based layouts stay fixed-size while the viewport keeps growing. Content becomes a narrow strip flanked by vast empty space. Meanwhile, people tend to sit further from large monitors, so normally-sized text becomes hard to read without leaning in.
+
+### Solution
+When you build for production, Ground Zero can automatically make your layout scale proportionally on large viewports. It does this by appending a `@media` override block to each CSS file where every `px` value is converted to a `vw` value relative to the configured `minWidth`. Viewports narrower than `minWidth` are unaffected — your source CSS is unchanged.
+
+Enable it in `gzero.config.js`:
+
+```js
+export default {
+    pageScaling: {
+        enabled: true,
+        minWidth: 1920,
+        precision: 2
+    }
+};
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `false` | Turn page scaling on or off. |
+| `minWidth` | number | `1920` | Viewport width in px where scaling kicks in. All `px` values in your CSS are converted relative to this number. |
+| `precision` | number | `2` | Decimal places for the generated `vw` values. Integer from 0 to 6. |
+
+This runs during the production build, just before CSS minification. Existing `@media` blocks inside your CSS are not carried over into the override block — only bare rule declarations are scaled.
+
 ## Sitemap and robots.txt
 
 When you build for production, Ground Zero automatically generates `build/sitemap.xml` and `build/robots.txt` from your pages and config. Set `siteUrl` in `gzero.config.js` to activate this:
@@ -193,7 +221,7 @@ This command:
 7. Copies `public/**` through unchanged.
 8. Generates `build/sitemap.xml` and `build/robots.txt` from page metadata and `gzero.config.js`.
 9. Minifies every HTML file in `build/`.
-10. Minifies every CSS file in `build/` using esbuild.
+10. Appends page scaling overrides to CSS files when `pageScaling.enabled` is true, then minifies every CSS file in `build/` using esbuild.
 11. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
+import { applyPageScalingToCss, loadPageScalingConfig } from './page-scaling.js';
 
 const CWD = process.cwd();
 const BUILD_DIR = join(CWD, 'build');
@@ -33,12 +34,22 @@ function findCssFiles(dir) {
 
 /**
  * Minify a CSS file using esbuild
- * @param {string} filePath - Path to the CSS file to minify
+ * @param {string} filePath - Path to the CSS file to process
+ * @param {{ enabled: boolean, minWidth: number, precision: number }} pageScalingConfig - Effective page scaling settings
  * @returns {Promise<void>}
  */
-async function minifyCssFile(filePath) {
+async function minifyCssFile(filePath, pageScalingConfig) {
     try {
-        const css = readFileSync(filePath, 'utf8');
+        let css = readFileSync(filePath, 'utf8');
+
+        if (pageScalingConfig.enabled) {
+            const scaledCss = applyPageScalingToCss(css, pageScalingConfig);
+            if (scaledCss !== css) {
+                css = scaledCss;
+                console.log(`Applied page scaling: ${filePath}`);
+            }
+        }
+
         const result = await esbuild.transform(css, {
             loader: 'css',
             minify: true
@@ -58,18 +69,23 @@ async function minifyCssFile(filePath) {
  */
 async function minifyAllCss() {
     const cssFiles = findCssFiles(BUILD_DIR);
-    
+
     if (cssFiles.length === 0) {
         console.log('No CSS files found in build/ directory');
         return;
     }
-    
+
+    const pageScalingConfig = await loadPageScalingConfig();
+
     console.log(`Found ${cssFiles.length} CSS file(s) to minify`);
-    
-    for (const file of cssFiles) {
-        await minifyCssFile(file);
+    if (pageScalingConfig.enabled) {
+        console.log(`[page-scaling] enabled at min-width ${pageScalingConfig.minWidth}px`);
     }
-    
+
+    for (const file of cssFiles) {
+        await minifyCssFile(file, pageScalingConfig);
+    }
+
     console.log('CSS minification complete');
 }
 

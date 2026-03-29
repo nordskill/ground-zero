@@ -8,8 +8,8 @@ import {
     resolveSourceAssetRequest,
     streamSourceAsset
 } from './scripts/assets.js';
+import { browserSyncPlugin } from './scripts/browser-sync-plugin.js';
 import { generateSvgSprite } from './scripts/svg-sprite.js';
-import browserSync from 'vite-plugin-browser-sync';
 
 const PROJECT_ROOT = process.cwd();
 const HTML_ROOT = process.env.GZERO_HTML_ROOT
@@ -322,7 +322,7 @@ export default defineConfig(() => {
             svgSpritePlugin(),
             ejsLiveReload(),
             sourceAssetsPlugin(),
-            browserSync()
+            browserSyncPlugin()
         ]
     };
 });

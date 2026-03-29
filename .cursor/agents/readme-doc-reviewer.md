@@ -78,11 +78,10 @@ Response back to parent agent:
 - If the README work was not completed, return `not done` plus a very short reason.
 - Do not summarize what was documented.
 - Allowed reasons:
-  - `end-user impact`
+  - `no end-user impact`
   - `already documented`
   - `bug fix`
   - `internal-only`
-  - `no end-user impact`
   - `insufficient diff context`
 - Example outputs:
   - `done`

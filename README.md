@@ -2,6 +2,8 @@
 
 Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vite, EJS templates, and modern CSS. Install it, run one command, and you get hot module reloading, BrowserSync mirroring, and production builds without writing any config files.
 
+Requires Node.js 22.12 or newer.
+
 ## Why Ground Zero?
 
 - Zero setup: Vite config, BrowserSync, and file watching are bundled, so you only write templates and CSS.
@@ -240,6 +242,25 @@ This command:
 11. Removes the temporary production HTML cache on success.
 
 Deploy the `build/` folder to any static host.
+
+## Upgrading to Ground Zero 2 / Vite 8
+
+Ground Zero 2 ships with Vite 8.
+
+Breaking change:
+
+- Node.js 22.12 or newer is now required.
+
+Migration steps:
+
+1. Update Node.js to 22.12 or newer.
+2. Reinstall dependencies in your project.
+3. Run `npx gzero` and `npx gzero-build`.
+4. Test your site in the browsers you support, especially if you relied on Vite's previous default browser target.
+
+Your Ground Zero templates, partials, `src/data/`, and CLI commands do not need any new migration steps beyond that.
+
+For the general Vite 8 migration rules, see the official Vite migration guide: https://vite.dev/guide/migration
 
 ## License
 

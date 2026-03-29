@@ -1,0 +1,9 @@
+.cursor/
+AGENTS.md
+build/
+dev-html/
+src/
+types/
+tsconfig.json
+gzero.config.js
+scripts/*.d.ts

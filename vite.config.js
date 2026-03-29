@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { resolve as pathResolve, isAbsolute as pathIsAbsolute, extname } from 'node:path';
+import { resolve as pathResolve, isAbsolute as pathIsAbsolute, extname, sep as pathSep } from 'node:path';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { compileAll, compilePage, buildDependencyGraph, getImpactedPages } from './scripts/compile-ejs.js';
 import {
@@ -77,14 +77,76 @@ function ejsLiveReload() {
     let pending = new Set();
     /** @type {ReturnType<typeof setTimeout> | null} */
     let timer = null;
+    const dataDir = pathResolve(PROJECT_ROOT, 'src/data');
+
+    return {
+        name: 'ejs-live-reload',
+        apply: 'serve',
+        /**
+         * Register EJS watchers and rebuild callbacks.
+         * @param {import('vite').ViteDevServer} server - Active Vite dev server.
+         * @returns {Promise<void>}
+         */
+        async configureServer(server) {
+            graph = await buildDependencyGraph();
+            const srcDir = pathResolve(PROJECT_ROOT, 'src');
+            const watchGlobs = [
+                `${srcDir}/**/*.ejs`,
+                `${dataDir}/**/*.json`,
+                srcDir
+            ];
+
+            server.watcher.add(watchGlobs);
+            console.log('[ejs-live-reload] watching:', watchGlobs);
+            server.watcher.on('change', handleChange);
+            server.watcher.on('add', handleAdd);
+            server.watcher.on('unlink', handleUnlink);
+
+            function handleChange(filePath) {
+                handleWatchedFileChange('change', filePath);
+            }
+
+            function handleAdd(filePath) {
+                handleWatchedFileChange('add', filePath);
+            }
+
+            function handleUnlink(filePath) {
+                handleWatchedFileChange('unlink', filePath);
+            }
+
+            /**
+             * Rebuild affected pages and force a browser reload.
+             * @param {'change' | 'add' | 'unlink'} type - Watcher event name.
+             * @param {string} filePath - Changed file path.
+             * @returns {void}
+             */
+            function handleWatchedFileChange(type, filePath) {
+                if (!filePath.endsWith('.ejs') && !isGlobalDataFile(filePath)) return;
+                const absolutePath = toAbs(filePath);
+                console.log(`[ejs-live-reload] ${type}:`, absolutePath);
+                schedule(server, absolutePath);
+            }
+        }
+    };
 
     /**
      * Convert a watcher path to an absolute filesystem path.
-     * @param {string} p - Relative or absolute path.
+     * @param {string} filePath - Relative or absolute path.
      * @returns {string} Absolute path.
      */
-    function toAbs(p) {
-        return pathIsAbsolute(p) ? p : pathResolve(PROJECT_ROOT, p);
+    function toAbs(filePath) {
+        return pathIsAbsolute(filePath) ? filePath : pathResolve(PROJECT_ROOT, filePath);
+    }
+
+    /**
+     * Check whether a changed file belongs to global JSON data.
+     * @param {string} filePath - Relative or absolute path.
+     * @returns {boolean} `true` when the file is a JSON file under `src/data`.
+     */
+    function isGlobalDataFile(filePath) {
+        const absolutePath = toAbs(filePath);
+        const isInsideDataDir = absolutePath.startsWith(`${dataDir}${pathSep}`);
+        return isInsideDataDir && absolutePath.endsWith('.json');
     }
 
     /**
@@ -97,6 +159,13 @@ function ejsLiveReload() {
         pending.clear();
         clearTimeout(timer ?? undefined);
         timer = null;
+
+        const hasGlobalDataChanges = changed.some(isGlobalDataFile);
+        if (hasGlobalDataChanges) {
+            await compileAll();
+            server.ws.send({ type: 'full-reload' });
+            return;
+        }
 
         graph = await buildDependencyGraph();
 
@@ -114,49 +183,19 @@ function ejsLiveReload() {
     /**
      * Batch multiple file changes into one rebuild.
      * @param {import('vite').ViteDevServer} server - Active Vite dev server.
-     * @param {string} file - Changed file path.
+     * @param {string} filePath - Changed file path.
      * @returns {void}
      */
-    function schedule(server, file) {
-        pending.add(file);
-        if (!timer) timer = setTimeout(() => flush(server), 25);
-    }
-
-    return {
-        name: 'ejs-live-reload',
-        apply: 'serve',
-        /**
-         * Register EJS watchers and rebuild callbacks.
-         * @param {import('vite').ViteDevServer} server - Active Vite dev server.
-         * @returns {Promise<void>}
-         */
-        async configureServer(server) {
-            graph = await buildDependencyGraph();
-            const srcDir = pathResolve(PROJECT_ROOT, 'src');
-            const watchGlobs = [
-                `${srcDir}/**/*.ejs`,
-                srcDir
-            ];
-            server.watcher.add(watchGlobs);
-            console.log('[ejs-live-reload] watching:', watchGlobs);
-
-            /**
-             * Build a watcher callback for a specific event type.
-             * @param {'change' | 'add' | 'unlink'} type - Watcher event name.
-             * @returns {(file: string) => void} Chokidar callback.
-             */
-            const mkHandler = (type) => (file) => {
-                if (!file.endsWith('.ejs')) return;
-                const abs = toAbs(file);
-                console.log(`[ejs-live-reload] ${type}:`, abs);
-                schedule(server, abs);
-            };
-
-            server.watcher.on('change', mkHandler('change'));
-            server.watcher.on('add', mkHandler('add'));
-            server.watcher.on('unlink', mkHandler('unlink'));
+    function schedule(server, filePath) {
+        pending.add(filePath);
+        if (!timer) {
+            timer = setTimeout(flushPendingChanges, 25);
         }
-    };
+
+        function flushPendingChanges() {
+            void flush(server);
+        }
+    }
 }
 
 /**

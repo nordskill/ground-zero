@@ -11,17 +11,32 @@ Ground Zero (`ground-zero`) is a zero-config static site generator that wraps Vi
 
 ## Project structure
 
-Ground Zero expects three folders and one config file:
+Ground Zero expects a few core folders and one config file:
 
 - **`src/pages/`** — Your EJS templates. Each `.ejs` file here becomes a clean-URL page (e.g. `about.ejs` → `/about/`).
 - **`src/assets/`** — Images, CSS, JS, icons, video, PDFs, and anything else your site needs. In templates, reference these files with `/assets/` URLs (e.g. `/assets/images/me.jpg`). During a production build they end up in `build/assets/`.
+- **`src/data/`** — Optional global JSON data. Every `.json` file here is loaded once and exposed to all EJS templates as `globalData`.
 - **`public/`** — Files that should appear at the root of your site exactly as-is, like `favicon.ico` or `manifest.webmanifest`. Do not put a `robots.txt` here — the build generates one automatically.
 - **`gzero.config.js`** — Project-level settings (see Responsive images below).
-
 There is also a special template variable called `moduleEntry`. It points to `src/assets/js/main.js` so Vite can bundle your JavaScript. Use it in a template like this:
 
 ```ejs
 <script type="module" src="<%= moduleEntry %>"></script>
+```
+
+### Global JSON data
+
+Put shared JSON files anywhere under `src/data/`. Ground Zero mirrors the folder structure into one `globalData` object that every EJS template and partial can read.
+
+Examples:
+
+- `src/data/company.json` -> `globalData.company`
+- `src/data/projects/featured.json` -> `globalData.projects.featured`
+
+```ejs
+<footer>
+    <a href="mailto:<%= globalData.company.email %>"><%= globalData.company.email %></a>
+</footer>
 ```
 
 ### Referencing assets in templates
@@ -171,7 +186,7 @@ mkdir my-site && cd my-site
 npm init -y
 npm install @nordskill/ground-zero
 
-mkdir -p src/pages src/partials src/assets/css src/assets/js src/assets/icons src/assets/images src/assets/video public
+mkdir -p src/pages src/partials src/data src/assets/css src/assets/js src/assets/icons src/assets/images src/assets/video public
 touch src/pages/index.ejs src/assets/css/main.css src/assets/js/main.js gzero.config.js
 ```
 
@@ -229,3 +244,7 @@ Deploy the `build/` folder to any static host.
 ## License
 
 MIT © Ground Zero contributors.
+
+
+
+

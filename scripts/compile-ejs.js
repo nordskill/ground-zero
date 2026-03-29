@@ -10,12 +10,35 @@ import { assertNoPageOutputCollisions, getPagePathInfo } from './page-paths.js';
 const CWD = process.cwd();
 const PAGES_DIR = join(CWD, 'src/pages');
 const PARTIALS_DIR = join(CWD, 'src/partials');
+const DATA_DIR = join(CWD, 'src/data');
 const DEV_OUT_DIR = join(CWD, 'dev-html');
 const ICONS_DIR = join(CWD, 'src/assets/icons');
 const SPRITE_PARTIAL = join(CWD, 'src/partials/svg-sprite.ejs');
 
 const MODULE_ENTRY_ABS = join(CWD, 'src/assets/js/main.js');
 const MODULE_ENTRY = `/@fs/${MODULE_ENTRY_ABS.replaceAll('\\', '/')}`;
+
+/**
+ * @typedef {Record<string, unknown>} PlainObject
+ */
+
+/**
+ * Create a plain key-value object without a prototype.
+ * @returns {PlainObject} Empty object for template data storage.
+ */
+function createPlainObject() {
+    return /** @type {PlainObject} */ (Object.create(null));
+}
+
+/**
+ * Check whether an object has a direct property.
+ * @param {PlainObject} value - Object to inspect.
+ * @param {string} key - Property name.
+ * @returns {boolean} `true` when the property exists directly on the object.
+ */
+function hasOwnKey(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
+}
 
 /**
  * Strip EJS comments (<%# ... %>) while preserving line count.
@@ -67,21 +90,25 @@ function readEjsFile(filePath) {
 ejs.fileLoader = readEjsFile;
 
 /**
- * Recursively walk a directory and collect `.ejs` files.
+ * Recursively walk a directory and collect files with the given extension.
  * @param {string} dir - Directory to scan.
- * @returns {string[]} Absolute EJS file paths.
+ * @param {string} extension - File extension to collect.
+ * @returns {string[]} Absolute file paths.
  */
-function walkDir(dir) {
+function walkDirByExtension(dir, extension) {
     /** @type {string[]} */
-    const out = [];
-    if (!existsSync(dir)) return out;
+    const filePaths = [];
+    if (!existsSync(dir)) return filePaths;
     for (const entry of readdirSync(dir)) {
-        const p = join(dir, entry);
-        const s = statSync(p);
-        if (s.isDirectory()) out.push(...walkDir(p));
-        else if (p.endsWith('.ejs')) out.push(p);
+        const entryPath = join(dir, entry);
+        const entryStats = statSync(entryPath);
+        if (entryStats.isDirectory()) {
+            filePaths.push(...walkDirByExtension(entryPath, extension));
+        } else if (entryPath.endsWith(extension)) {
+            filePaths.push(entryPath);
+        }
     }
-    return out;
+    return filePaths;
 }
 
 /**
@@ -92,11 +119,91 @@ function readPartials() {
     /** @type {Record<string, string>} */
     const map = {};
     if (!existsSync(PARTIALS_DIR)) return map;
-    for (const file of walkDir(PARTIALS_DIR)) {
+    for (const file of walkDirByExtension(PARTIALS_DIR, '.ejs')) {
         const key = pathRelative(PARTIALS_DIR, file).replace(/\.ejs$/, '');
         map[key] = readEjsFile(file);
     }
     return map;
+}
+
+/**
+ * Check whether a value is a plain object.
+ * @param {unknown} value - Runtime value to validate.
+ * @returns {value is PlainObject} `true` when the value is a plain object.
+ */
+function isPlainObject(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Read and parse a JSON file from `src/data`.
+ * @param {string} filePath - Absolute JSON file path.
+ * @returns {unknown} Parsed JSON value.
+ */
+function readJsonFile(filePath) {
+    const rawContent = readFileSync(filePath, 'utf8');
+
+    try {
+        return JSON.parse(rawContent);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Invalid JSON in ${filePath}: ${errorMessage}`);
+    }
+}
+
+/**
+ * Store a JSON value at a nested object path.
+ * @param {PlainObject} rootObject - Destination object.
+ * @param {string[]} pathSegments - Nested key path.
+ * @param {unknown} value - Parsed JSON value.
+ * @param {string} sourcePath - Source file path for error reporting.
+ * @returns {void}
+ */
+function assignDataValue(rootObject, pathSegments, value, sourcePath) {
+    /** @type {PlainObject} */
+    let currentLevel = rootObject;
+
+    for (let index = 0; index < pathSegments.length - 1; index++) {
+        const segment = pathSegments[index];
+
+        if (!hasOwnKey(currentLevel, segment)) {
+            currentLevel[segment] = createPlainObject();
+        } else if (!isPlainObject(currentLevel[segment])) {
+            const collisionPath = pathSegments.slice(0, index + 1).join('.');
+            throw new Error(`Global data path collision in ${sourcePath}: "${collisionPath}" is already defined as a non-object value.`);
+        }
+
+        currentLevel = /** @type {PlainObject} */ (currentLevel[segment]);
+    }
+
+    const finalSegment = pathSegments[pathSegments.length - 1];
+    if (hasOwnKey(currentLevel, finalSegment)) {
+        const collisionPath = pathSegments.join('.');
+        throw new Error(`Global data path collision in ${sourcePath}: "${collisionPath}" is already defined by another JSON file.`);
+    }
+
+    currentLevel[finalSegment] = value;
+}
+
+/**
+ * Read all JSON files under `src/data` and expose them as a nested object tree.
+ * Example: `src/data/company/contact.json` becomes `globalData.company.contact`.
+ * @returns {PlainObject} Nested global template data.
+ */
+function readGlobalData() {
+    const globalData = createPlainObject();
+
+    if (!existsSync(DATA_DIR)) return globalData;
+
+    const jsonFiles = walkDirByExtension(DATA_DIR, '.json');
+    for (const filePath of jsonFiles) {
+        const relativePath = pathRelative(DATA_DIR, filePath).replaceAll('\\', '/');
+        const pathSegments = relativePath.replace(/\.json$/i, '').split('/');
+        const jsonValue = readJsonFile(filePath);
+        assignDataValue(globalData, pathSegments, jsonValue, filePath);
+    }
+
+    return globalData;
 }
 
 /**
@@ -143,8 +250,8 @@ function scanIncludes(filePath) {
  * }>} Graph data used for incremental rebuilds.
  */
 export async function buildDependencyGraph() {
-    const pages = new Set(walkDir(PAGES_DIR));
-    const partials = new Set(walkDir(PARTIALS_DIR));
+    const pages = new Set(walkDirByExtension(PAGES_DIR, '.ejs'));
+    const partials = new Set(walkDirByExtension(PARTIALS_DIR, '.ejs'));
     const universe = new Set([...pages, ...partials]);
 
     /** @type {Map<string, Set<string>>} */
@@ -184,23 +291,23 @@ export function getImpactedPages(changedPaths, graph) {
     /** @type {string[]} */
     const stack = [];
 
-    for (const p of changedPaths) {
-        const abs = pathResolve(CWD, p);
-        stack.push(abs);
+    for (const changedPath of changedPaths) {
+        const absolutePath = pathResolve(CWD, changedPath);
+        stack.push(absolutePath);
     }
 
     while (stack.length) {
-        const cur = stack.pop();
-        if (!cur || seen.has(cur)) continue;
-        seen.add(cur);
+        const currentPath = stack.pop();
+        if (!currentPath || seen.has(currentPath)) continue;
+        seen.add(currentPath);
 
-        if (graph.pages.has(cur)) result.add(cur);
+        if (graph.pages.has(currentPath)) result.add(currentPath);
 
-        const ups = graph.dependents.get(cur);
-        if (ups) {
-            for (const u of ups) {
-                if (graph.pages.has(u)) result.add(u);
-                if (!seen.has(u)) stack.push(u);
+        const upstreamDependents = graph.dependents.get(currentPath);
+        if (upstreamDependents) {
+            for (const dependentPath of upstreamDependents) {
+                if (graph.pages.has(dependentPath)) result.add(dependentPath);
+                if (!seen.has(dependentPath)) stack.push(dependentPath);
             }
         }
     }
@@ -240,6 +347,7 @@ function resetOutDir(outDir) {
  * Compile a single EJS page using the current partial set.
  * @param {string} pageFileAbs - Absolute page path.
  * @param {Record<string, string>} partials - Partial map from `readPartials()`.
+ * @param {PlainObject} globalData - Nested JSON data exposed to all templates.
  * @param {string} outDir - Absolute HTML output directory.
  * @param {{
  *   responsiveImages?: boolean,
@@ -248,12 +356,12 @@ function resetOutDir(outDir) {
  * }} [options] - Optional build-time image transform settings.
  * @returns {void}
  */
-function compilePageWithPartials(pageFileAbs, partials, outDir, options) {
+function compilePageWithPartials(pageFileAbs, partials, globalData, outDir, options) {
     if (!existsSync(pageFileAbs)) return;
     const template = readEjsFile(pageFileAbs);
     const renderedHtml = ejs.render(
         template,
-        { partials, moduleEntry: MODULE_ENTRY },
+        { globalData, partials, moduleEntry: MODULE_ENTRY },
         { root: PAGES_DIR, filename: pageFileAbs }
     );
     const html = transformHtmlImages(renderedHtml, options);
@@ -280,8 +388,9 @@ export async function compilePage(pageFileAbs, outDir, options) {
     const targetOutDir = getOutDir(outDir);
     ensureOutDir(targetOutDir);
     const partials = readPartials();
-    assertNoPageOutputCollisions(PAGES_DIR, walkDir(PAGES_DIR));
-    compilePageWithPartials(pageFileAbs, partials, targetOutDir, options);
+    const globalData = readGlobalData();
+    assertNoPageOutputCollisions(PAGES_DIR, walkDirByExtension(PAGES_DIR, '.ejs'));
+    compilePageWithPartials(pageFileAbs, partials, globalData, targetOutDir, options);
 }
 
 /**
@@ -299,10 +408,11 @@ export async function compileAll(outDir, options) {
     await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
     resetOutDir(targetOutDir);
     const partials = readPartials();
-    const pages = walkDir(PAGES_DIR);
+    const globalData = readGlobalData();
+    const pages = walkDirByExtension(PAGES_DIR, '.ejs');
     assertNoPageOutputCollisions(PAGES_DIR, pages);
     for (const page of pages) {
-        compilePageWithPartials(page, partials, targetOutDir, options);
+        compilePageWithPartials(page, partials, globalData, targetOutDir, options);
     }
 }
 

@@ -7,14 +7,14 @@
 %>
 <!doctype html>
 <html lang="en">
-<%- include('../partials/head', { title: 'Test : About' }) %>
+<%- include('../partials/head', { title: 'Test : About', description: globalData.about.seo.description }) %>
 
     <body>
         <%- include('../partials/svg-sprite') %>
         <%- include('../partials/header') %>
         <main>
             <h1>About</h1>
-            <p>This is a minimal demo using EJS templates compiled to static HTML.</p>
+            <p><%= globalData.about.page.subtitle %></p>
             <div class="notices">
                 <%- include('../components/component', {
                     type: '',

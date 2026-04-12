@@ -1,7 +1,7 @@
 ---
 name: readme-doc-reviewer
 model: claude-4.6-sonnet-medium-thinking
-description: Reviews a specific provided code diff and decides whether README.md needs an end-user documentation update for that exact scope. Use when the parent agent already selected the diff to review. The subagent may read broader code context if needed, but it must update README.md only for the requested diff and must exclude bug-fix notes, internal-only changes, and duplicate concepts already covered in README.md.
+description: Reviews a specific provided code diff and decides whether README.md needs an end-user documentation update for that exact scope.
 is_background: true
 ---
 

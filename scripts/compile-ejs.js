@@ -241,7 +241,7 @@ function scanIncludes(filePath) {
 }
 
 /**
- * Build the include dependency graph for pages and partials.
+ * Build the include dependency graph for pages and every reachable include file.
  * @returns {Promise<{
  *   pages: Set<string>,
  *   partials: Set<string>,
@@ -251,21 +251,34 @@ function scanIncludes(filePath) {
  */
 export async function buildDependencyGraph() {
     const pages = new Set(walkDirByExtension(PAGES_DIR, '.ejs'));
-    const partials = new Set(walkDirByExtension(PARTIALS_DIR, '.ejs'));
-    const universe = new Set([...pages, ...partials]);
+    /** @type {Set<string>} */
+    const partials = new Set();
+    /** @type {Set<string>} */
+    const discovered = new Set(pages);
+    const pending = [...pages];
 
     /** @type {Map<string, Set<string>>} */
     const includes = new Map();
     /** @type {Map<string, Set<string>>} */
     const dependents = new Map();
 
-    for (const file of universe) {
+    while (pending.length) {
+        const file = pending.pop();
+        if (!file) continue;
+        if (!pages.has(file)) partials.add(file);
+
         const incs = scanIncludes(file);
         includes.set(file, incs);
+
         for (const target of incs) {
             if (!dependents.has(target)) dependents.set(target, new Set());
             const deps = dependents.get(target);
             if (deps) deps.add(file);
+
+            if (!discovered.has(target)) {
+                discovered.add(target);
+                pending.push(target);
+            }
         }
     }
 

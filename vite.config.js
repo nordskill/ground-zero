@@ -204,6 +204,7 @@ function ejsLiveReload() {
  */
 function sourceAssetsPlugin() {
     const srcAssetsDir = pathResolve(PROJECT_ROOT, 'src/assets');
+    const viteManagedAssetDirs = new Set(['css', 'js']);
 
     return {
         name: 'source-assets',
@@ -225,6 +226,9 @@ function sourceAssetsPlugin() {
              */
             const reloadOnAssetChange = (type) => (file) => {
                 if (!file.startsWith(srcAssetsDir)) return;
+                const relativePath = file.slice(srcAssetsDir.length + 1).replaceAll('\\', '/');
+                const [topLevelDir] = relativePath.split('/');
+                if (viteManagedAssetDirs.has(topLevelDir)) return;
                 console.log(`[source-assets] ${type}:`, file);
                 server.ws.send({ type: 'full-reload' });
             };

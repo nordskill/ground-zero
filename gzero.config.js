@@ -12,6 +12,7 @@ export default {
         precision: 2
     },
     sitemap: {
+        enabled: true,
         defaults: {
             changefreq: 'monthly',
             priority: 0.5

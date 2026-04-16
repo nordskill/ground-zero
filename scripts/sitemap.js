@@ -3,6 +3,7 @@ import {
     mkdirSync,
     readdirSync,
     readFileSync,
+    rmSync,
     statSync,
     writeFileSync
 } from 'node:fs';
@@ -36,7 +37,8 @@ const CHANGEFREQ_VALUES = new Set([
 
 /**
  * @typedef {Object} SitemapBuildConfig
- * @property {string} siteUrl
+ * @property {boolean} enabled
+ * @property {string | undefined} [siteUrl]
  * @property {{ changefreq: SitemapChangefreq, priority: number }} defaults
  * @property {string[]} robotsDisallow
  */
@@ -157,16 +159,15 @@ function normalizeSiteUrl(siteUrl) {
  */
 async function loadSitemapBuildConfig() {
     const userConfig = await loadProjectConfig();
-    const rawSiteUrl = typeof userConfig.siteUrl === 'string' ? userConfig.siteUrl.trim() : '';
-    if (!rawSiteUrl) {
-        throw new Error('Missing "siteUrl" in ground-zero config; sitemap generation requires it');
-    }
-
     const sitemapConfigValue = userConfig.sitemap;
     if (sitemapConfigValue !== undefined && !isPlainObject(sitemapConfigValue)) {
         throw new Error('Expected "sitemap" in ground-zero config to be an object');
     }
     const sitemapConfig = sitemapConfigValue;
+    const sitemapEnabled = sitemapConfig?.enabled ?? true;
+    if (typeof sitemapEnabled !== 'boolean') {
+        throw new Error('Expected "sitemap.enabled" in ground-zero config to be boolean');
+    }
 
     const rawDefaults = sitemapConfig ? sitemapConfig.defaults : undefined;
     if (rawDefaults !== undefined && !isPlainObject(rawDefaults)) {
@@ -191,9 +192,14 @@ async function loadSitemapBuildConfig() {
     }
 
     const defaults = validateSitemapMeta(rawDefaults ?? {}, '"sitemap.defaults"', { allowExclude: false });
+    const rawSiteUrl = typeof userConfig.siteUrl === 'string' ? userConfig.siteUrl.trim() : '';
+    if (sitemapEnabled && !rawSiteUrl) {
+        throw new Error('Missing "siteUrl" in ground-zero config; sitemap generation requires it');
+    }
 
     return {
-        siteUrl: normalizeSiteUrl(rawSiteUrl),
+        enabled: sitemapEnabled,
+        siteUrl: rawSiteUrl ? normalizeSiteUrl(rawSiteUrl) : undefined,
         defaults: {
             changefreq: defaults.changefreq ?? 'monthly',
             priority: defaults.priority ?? 0.5
@@ -298,6 +304,11 @@ function readPageSitemapMeta(pageFile) {
  * Sitemap URL entries.
  */
 function buildSitemapEntries(config) {
+    const siteUrl = config.siteUrl;
+    if (!siteUrl) {
+        throw new Error('Missing "siteUrl" in ground-zero config; sitemap generation requires it');
+    }
+
     const pageFiles = walkPageFiles(PAGES_DIR).sort((leftPage, rightPage) => {
         const leftRoute = getPageRoute(leftPage);
         const rightRoute = getPageRoute(rightPage);
@@ -320,7 +331,7 @@ function buildSitemapEntries(config) {
         const stats = statSync(pageFile);
 
         entries.push({
-            loc: toAbsolutePageUrl(config.siteUrl, route),
+            loc: toAbsolutePageUrl(siteUrl, route),
             lastmod: stats.mtime.toISOString(),
             changefreq: meta.changefreq ?? config.defaults.changefreq,
             priority: meta.priority ?? config.defaults.priority
@@ -373,8 +384,10 @@ function renderRobotsTxt(config) {
         lines.push(`Disallow: ${pattern}`);
     }
 
-    lines.push('');
-    lines.push(`Sitemap: ${config.siteUrl}/sitemap.xml`);
+    if (config.enabled && config.siteUrl) {
+        lines.push('');
+        lines.push(`Sitemap: ${config.siteUrl}/sitemap.xml`);
+    }
 
     return `${lines.join('\n')}\n`;
 }
@@ -386,12 +399,19 @@ function renderRobotsTxt(config) {
  */
 export async function writeSitemapFiles(outDir) {
     const config = await loadSitemapBuildConfig();
-    const entries = buildSitemapEntries(config);
+    const sitemapPath = pathResolve(outDir, 'sitemap.xml');
 
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(pathResolve(outDir, 'sitemap.xml'), renderSitemapXml(entries));
+    if (config.enabled) {
+        const entries = buildSitemapEntries(config);
+        writeFileSync(sitemapPath, renderSitemapXml(entries));
+        console.log(`[sitemap] wrote ${entries.length} URL entries`);
+    } else {
+        rmSync(sitemapPath, { force: true });
+        console.log('[sitemap] skipped; sitemap.enabled is false');
+    }
+
     writeFileSync(pathResolve(outDir, 'robots.txt'), renderRobotsTxt(config));
 
-    console.log(`[sitemap] wrote ${entries.length} URL entries`);
     console.log('[robots] wrote robots.txt');
 }

@@ -103,12 +103,13 @@ This runs during the production build, just before CSS minification. Existing `@
 
 ## Sitemap and robots.txt
 
-When you build for production, Ground Zero automatically generates `build/sitemap.xml` and `build/robots.txt` from your pages and config. Set `siteUrl` in `gzero.config.js` to activate this:
+When you build for production, Ground Zero generates `build/robots.txt` from your config and can also generate `build/sitemap.xml`. Enable sitemap output in `gzero.config.js`:
 
 ```js
 export default {
     siteUrl: 'https://example.com',
     sitemap: {
+        enabled: true,
         defaults: {
             changefreq: 'monthly',
             priority: 0.5
@@ -119,6 +120,8 @@ export default {
     }
 };
 ```
+
+Set `sitemap.enabled` to `false` to skip sitemap generation. In that case, `siteUrl` is optional and the generated `robots.txt` omits the `Sitemap:` line.
 
 Every `.ejs` file in `src/pages/` gets a sitemap entry. The URL is derived from the file path:
 
@@ -265,7 +268,6 @@ For the general Vite 8 migration rules, see the official Vite migration guide: h
 ## License
 
 MIT © Ground Zero contributors.
-
 
 
 

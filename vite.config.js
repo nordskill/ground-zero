@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve as pathResolve, isAbsolute as pathIsAbsolute, extname, sep as pathSep } from 'node:path';
 import { existsSync, readdirSync, statSync } from 'node:fs';
+import { loadBasePath } from './scripts/base-path.js';
 import { compileAll, compilePage, buildDependencyGraph, getImpactedPages } from './scripts/compile-ejs.js';
 import {
     isExistingFile,
@@ -200,9 +201,10 @@ function ejsLiveReload() {
 
 /**
  * Serve source assets directly from `src/assets` during development.
+ * @param {string} basePath - Normalized deploy base path.
  * @returns {import('vite').Plugin} Vite dev plugin.
  */
-function sourceAssetsPlugin() {
+function sourceAssetsPlugin(basePath) {
     const srcAssetsDir = pathResolve(PROJECT_ROOT, 'src/assets');
     const viteManagedAssetDirs = new Set(['css', 'js']);
 
@@ -247,12 +249,12 @@ function sourceAssetsPlugin() {
             server.middlewares.use((req, res, next) => {
                 const requestUrl = req.url ?? '';
 
-                if (!isSourceAssetUrl(requestUrl)) {
+                if (!isSourceAssetUrl(requestUrl, basePath)) {
                     next();
                     return;
                 }
 
-                const resolved = resolveSourceAssetRequest(requestUrl);
+                const resolved = resolveSourceAssetRequest(requestUrl, basePath);
                 if (!resolved) {
                     next();
                     return;
@@ -298,10 +300,12 @@ function findHtmlEntries(rootDir) {
     return entries;
 }
 
-export default defineConfig(() => {
+export default defineConfig(async () => {
+    const basePath = await loadBasePath();
     const htmlInputs = findHtmlEntries(HTML_ROOT);
 
     return {
+        base: basePath,
         root: HTML_ROOT,
         publicDir: pathResolve(PROJECT_ROOT, 'public'),
         server: {
@@ -325,7 +329,7 @@ export default defineConfig(() => {
         plugins: [
             svgSpritePlugin(),
             ejsLiveReload(),
-            sourceAssetsPlugin(),
+            sourceAssetsPlugin(basePath),
             browserSyncPlugin()
         ]
     };

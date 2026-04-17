@@ -1,5 +1,6 @@
 export default {
     siteUrl: 'https://my-site.com',
+    basePath: '/',
     imageConversion: {
         format: 'avif',
         quality: 70,

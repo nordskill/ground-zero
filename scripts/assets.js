@@ -14,6 +14,7 @@ import {
     resolve as pathResolve,
     sep
 } from 'node:path';
+import { stripBasePath, withBase } from './base-path.js';
 
 const CWD = process.cwd();
 const SOURCE_ASSETS_DIR = pathResolve(CWD, 'src/assets');
@@ -57,39 +58,63 @@ function hasParentTraversal(assetPath) {
 /**
  * Resolve a public `/assets/**` URL back to a file inside `src/assets`.
  * @param {string} value - Request URL or authored asset URL.
+ * @param {string} [basePath='/'] - Normalized deploy base path.
  * @returns {{ relativePath: string, sourcePath: string, publicUrl: string } | null}
  * Source asset resolution data, or `null` when the URL is outside `/assets/**`.
  */
-export function resolveSourceAssetRequest(value) {
+export function resolveSourceAssetRequest(value, basePath = '/') {
     const input = String(value ?? '').trim();
     if (!input) return null;
     if (/^(?:[a-z]+:)?\/\//i.test(input) || input.startsWith('data:') || input.startsWith('#')) {
         return null;
     }
 
-    const { path, suffix } = splitUrlSuffix(input);
-    const normalized = normalizeSlashes(path);
-    const relativePath = normalized.startsWith('/assets/')
-        ? normalized.slice('/assets/'.length)
-        : normalized.startsWith('assets/')
-            ? normalized.slice('assets/'.length)
-            : '';
+    const normalizedInputPath = normalizeSlashes(splitUrlSuffix(input).path);
+    const strippedInput = stripBasePath(input, basePath);
+    const prefersStrippedCandidate = basePath !== '/' && normalizedInputPath.startsWith(withBase('/assets/', basePath));
+    const candidates = prefersStrippedCandidate
+        ? [strippedInput, input]
+        : strippedInput === input ? [input] : [input, strippedInput];
 
-    if (!relativePath || hasParentTraversal(relativePath)) {
-        return null;
+    for (const candidate of candidates) {
+        const resolvedCandidate = resolveAssetCandidate(candidate);
+        if (!resolvedCandidate) continue;
+
+        const sourcePath = pathResolve(SOURCE_ASSETS_DIR, resolvedCandidate.relativePath);
+        const sourcePrefix = `${SOURCE_ASSETS_DIR}${sep}`;
+        if (sourcePath !== SOURCE_ASSETS_DIR && !sourcePath.startsWith(sourcePrefix)) {
+            continue;
+        }
+
+        return {
+            relativePath: resolvedCandidate.relativePath,
+            sourcePath,
+            publicUrl: `${withBase(`/assets/${resolvedCandidate.relativePath}`, basePath)}${resolvedCandidate.suffix}`
+        };
     }
 
-    const sourcePath = pathResolve(SOURCE_ASSETS_DIR, relativePath);
-    const sourcePrefix = `${SOURCE_ASSETS_DIR}${sep}`;
-    if (sourcePath !== SOURCE_ASSETS_DIR && !sourcePath.startsWith(sourcePrefix)) {
-        return null;
-    }
+    return null;
 
-    return {
-        relativePath,
-        sourcePath,
-        publicUrl: `/assets/${relativePath}${suffix}`
-    };
+    /**
+     * Parse one candidate URL into the canonical `/assets/**` source contract.
+     * @param {string} candidate - Raw or base-stripped asset URL.
+     * @returns {{ relativePath: string, suffix: string } | null} Parsed asset path data.
+     */
+    function resolveAssetCandidate(candidate) {
+        const { path, suffix } = splitUrlSuffix(candidate);
+        const normalized = normalizeSlashes(path);
+        const relativePath = normalized.startsWith('/assets/')
+            ? normalized.slice('/assets/'.length)
+            : normalized.startsWith('assets/')
+                ? normalized.slice('assets/'.length)
+                : '';
+
+        if (!relativePath || hasParentTraversal(relativePath)) {
+            return null;
+        }
+
+        return { relativePath, suffix };
+    }
 }
 
 /**
@@ -191,10 +216,11 @@ export function streamSourceAsset(res, filePath) {
 /**
  * Check whether a request targets the `/assets/**` source asset contract.
  * @param {string} requestPath - Request pathname or URL.
+ * @param {string} [basePath='/'] - Normalized deploy base path.
  * @returns {boolean} `true` when the request points at a supported asset URL.
  */
-export function isSourceAssetUrl(requestPath) {
-    return resolveSourceAssetRequest(requestPath) !== null;
+export function isSourceAssetUrl(requestPath, basePath = '/') {
+    return resolveSourceAssetRequest(requestPath, basePath) !== null;
 }
 
 /**

@@ -13,6 +13,7 @@ import { readdirSync, rmSync } from 'node:fs';
 import { resolve as pathResolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { compileAll } from '../scripts/compile-ejs.js';
+import { loadBasePath } from '../scripts/base-path.js';
 import { copySourceAssetsToBuild } from '../scripts/assets.js';
 import {
     buildResponsiveImageManifest,
@@ -79,13 +80,15 @@ function cleanupTempBuildHtml() {
 }
 
 (async () => {
+    const basePath = await loadBasePath();
     const imageConfig = await loadImageConversionConfig();
-    const imageManifest = await buildResponsiveImageManifest(imageConfig);
+    const imageManifest = await buildResponsiveImageManifest(imageConfig, basePath);
 
     await compileAll(buildHtmlRoot, {
         responsiveImages: true,
         imageManifest,
-        imageConfig
+        imageConfig,
+        basePath
     });
     await runNode([viteBin, 'build', '--config', configPath], {
         GZERO_HTML_ROOT: buildHtmlRoot

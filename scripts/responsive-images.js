@@ -15,6 +15,7 @@ import {
     sep
 } from 'node:path';
 import sharp from 'sharp';
+import { stripBasePath, withBase } from './base-path.js';
 import { loadProjectConfig } from './project-config.js';
 
 const CWD = process.cwd();
@@ -172,18 +173,20 @@ function buildVariantWidths(sourceWidth, configuredSizes) {
 /**
  * Return the production URL for a generated image asset.
  * @param {string} relativePath - Path relative to `src/assets/images`.
+ * @param {string} basePath - Normalized deploy base path.
  * @returns {string} Public build URL.
  */
-function toBuildImageUrl(relativePath) {
-    return `/assets/images/${normalizeSlashes(relativePath)}`;
+function toBuildImageUrl(relativePath, basePath) {
+    return withBase(`/assets/images/${normalizeSlashes(relativePath)}`, basePath);
 }
 
 /**
  * Build metadata used to rewrite HTML and emit responsive images.
  * @param {ResponsiveImageConfig} config - Effective image conversion config.
+ * @param {string} [basePath='/'] - Normalized deploy base path.
  * @returns {Promise<Map<string, ResponsiveImageEntry>>} Source image manifest.
  */
-export async function buildResponsiveImageManifest(config) {
+export async function buildResponsiveImageManifest(config, basePath = '/') {
     /** @type {Map<string, ResponsiveImageEntry>} */
     const manifest = new Map();
     if (!existsSync(SOURCE_IMAGES_DIR)) return manifest;
@@ -196,7 +199,7 @@ export async function buildResponsiveImageManifest(config) {
                 mode: 'passthrough',
                 sourcePath,
                 outputPath: relativePath,
-                url: toBuildImageUrl(relativePath)
+                url: toBuildImageUrl(relativePath, basePath)
             });
             continue;
         }
@@ -226,7 +229,7 @@ export async function buildResponsiveImageManifest(config) {
                 width,
                 height,
                 relativePath: filePath,
-                url: toBuildImageUrl(filePath)
+                url: toBuildImageUrl(filePath, basePath)
             });
         }
 
@@ -270,38 +273,58 @@ function splitUrlSuffix(src) {
  * Resolve an authored `<img src>` into a file inside `src/assets/images`.
  * Only the canonical `/assets/images/**` contract is supported.
  * @param {string} src - Authored image source URL.
+ * @param {string} basePath - Normalized deploy base path.
  * @returns {string} Absolute source image path, or an empty string when unsupported.
  */
-function resolveSourceImagePath(src) {
+function resolveSourceImagePath(src, basePath) {
     if (!src) return '';
     if (/^(?:[a-z]+:)?\/\//i.test(src) || src.startsWith('data:') || src.startsWith('#')) {
         return '';
     }
 
-    const { path } = splitUrlSuffix(src);
-    if (!path) return '';
+    const normalizedInputPath = normalizeSlashes(splitUrlSuffix(src).path);
+    const strippedSrc = stripBasePath(src, basePath);
+    const prefersStrippedCandidate = basePath !== '/' && normalizedInputPath.startsWith(withBase('/assets/images/', basePath));
+    const candidates = prefersStrippedCandidate
+        ? [strippedSrc, src]
+        : strippedSrc === src ? [src] : [src, strippedSrc];
 
-    let decodedPath = path;
-    try {
-        decodedPath = decodeURIComponent(path);
-    } catch {
-        decodedPath = path;
+    for (const candidate of candidates) {
+        const relativePath = resolveImageCandidate(candidate);
+        if (!relativePath) continue;
+
+        const resolvedPath = pathResolve(SOURCE_IMAGES_DIR, relativePath);
+        if (!existsSync(resolvedPath) || !isSourceImagePath(resolvedPath)) {
+            continue;
+        }
+
+        return resolvedPath;
     }
 
-    const relativePath = decodedPath.startsWith('/assets/images/')
-        ? decodedPath.slice('/assets/images/'.length)
-        : decodedPath.startsWith('assets/images/')
-            ? decodedPath.slice('assets/images/'.length)
-            : '';
+    return '';
 
-    if (!relativePath) return '';
+    /**
+     * Parse one candidate image URL into the canonical `/assets/images/**` contract.
+     * @param {string} candidate - Raw or base-stripped image URL.
+     * @returns {string} Relative image path, or an empty string when unsupported.
+     */
+    function resolveImageCandidate(candidate) {
+        const { path } = splitUrlSuffix(candidate);
+        if (!path) return '';
 
-    const resolvedPath = pathResolve(SOURCE_IMAGES_DIR, relativePath);
-    if (!existsSync(resolvedPath) || !isSourceImagePath(resolvedPath)) {
-        return '';
+        let decodedPath = path;
+        try {
+            decodedPath = decodeURIComponent(path);
+        } catch {
+            decodedPath = path;
+        }
+
+        return decodedPath.startsWith('/assets/images/')
+            ? decodedPath.slice('/assets/images/'.length)
+            : decodedPath.startsWith('assets/images/')
+                ? decodedPath.slice('assets/images/'.length)
+                : '';
     }
-
-    return resolvedPath;
 }
 
 /**
@@ -391,7 +414,8 @@ function serializeImgTag(attrs, selfClosing) {
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, ResponsiveImageEntry>,
- *   imageConfig?: ResponsiveImageConfig
+ *   imageConfig?: ResponsiveImageConfig,
+ *   basePath?: string
  * }} [options] - Build-time image options.
  * @returns {string} HTML with responsive image attributes applied.
  */
@@ -399,6 +423,7 @@ export function transformHtmlImages(html, options = {}) {
     const responsiveImages = Boolean(options.responsiveImages);
     const imageManifest = options.imageManifest;
     const injectIntrinsicSize = options.imageConfig?.injectIntrinsicSize !== false;
+    const basePath = options.basePath ?? '/';
 
     if (!responsiveImages || !imageManifest) {
         return html;
@@ -409,7 +434,7 @@ export function transformHtmlImages(html, options = {}) {
         const srcAttr = findAttr(attrs, 'src');
         if (!srcAttr || srcAttr.value === null) return tag;
 
-        const sourcePath = resolveSourceImagePath(srcAttr.value);
+        const sourcePath = resolveSourceImagePath(srcAttr.value, basePath);
         if (!sourcePath) return tag;
 
         const entry = imageManifest.get(sourcePath);

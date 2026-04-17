@@ -8,6 +8,7 @@ import {
     writeFileSync
 } from 'node:fs';
 import { join, relative as pathRelative, resolve as pathResolve } from 'node:path';
+import { normalizeBasePath, withBase } from './base-path.js';
 import { loadProjectConfig } from './project-config.js';
 import { assertNoPageOutputCollisions, getPagePathInfo } from './page-paths.js';
 
@@ -39,6 +40,7 @@ const CHANGEFREQ_VALUES = new Set([
  * @typedef {Object} SitemapBuildConfig
  * @property {boolean} enabled
  * @property {string | undefined} [siteUrl]
+ * @property {string} basePath
  * @property {{ changefreq: SitemapChangefreq, priority: number }} defaults
  * @property {string[]} robotsDisallow
  */
@@ -131,7 +133,7 @@ function validateSitemapMeta(input, label, options) {
 /**
  * Normalize and validate the configured site URL.
  * @param {string} siteUrl - Raw site URL from config.
- * @returns {string} Canonical site URL without a trailing slash.
+ * @returns {string} Canonical site origin without a trailing slash.
  */
 function normalizeSiteUrl(siteUrl) {
     let url;
@@ -149,8 +151,11 @@ function normalizeSiteUrl(siteUrl) {
         throw new Error('"siteUrl" in ground-zero config must not contain query or hash segments');
     }
 
-    const pathname = url.pathname.replace(/\/+$/, '');
-    return `${url.origin}${pathname}`;
+    if (url.pathname !== '/' && url.pathname !== '') {
+        throw new Error('"siteUrl" in ground-zero config must not contain a path; use "basePath" for subdirectory deploys');
+    }
+
+    return url.origin;
 }
 
 /**
@@ -200,6 +205,7 @@ async function loadSitemapBuildConfig() {
     return {
         enabled: sitemapEnabled,
         siteUrl: rawSiteUrl ? normalizeSiteUrl(rawSiteUrl) : undefined,
+        basePath: normalizeBasePath(userConfig.basePath),
         defaults: {
             changefreq: defaults.changefreq ?? 'monthly',
             priority: defaults.priority ?? 0.5
@@ -237,20 +243,21 @@ function walkPageFiles(dir) {
 /**
  * Turn a page file path into its public route.
  * @param {string} pageFile - Absolute page file path.
+ * @param {string} basePath - Normalized deploy base path.
  * @returns {string} Public route path.
  */
-function getPageRoute(pageFile) {
-    return getPagePathInfo(PAGES_DIR, pageFile).route;
+function getPageRoute(pageFile, basePath) {
+    return withBase(getPagePathInfo(PAGES_DIR, pageFile).route, basePath);
 }
 
 /**
  * Join a route path to the configured site URL without losing path prefixes.
  * @param {string} siteUrl - Canonical site URL.
- * @param {string} route - Public route path.
+ * @param {string} route - Base-aware public route path.
  * @returns {string} Absolute page URL.
  */
 function toAbsolutePageUrl(siteUrl, route) {
-    return route === '/' ? `${siteUrl}/` : `${siteUrl}${route}`;
+    return new URL(route, siteUrl).toString();
 }
 
 /**
@@ -305,17 +312,19 @@ function readPageSitemapMeta(pageFile) {
  */
 function buildSitemapEntries(config) {
     const siteUrl = config.siteUrl;
+    const basePath = config.basePath;
     if (!siteUrl) {
         throw new Error('Missing "siteUrl" in ground-zero config; sitemap generation requires it');
     }
 
     const pageFiles = walkPageFiles(PAGES_DIR).sort((leftPage, rightPage) => {
-        const leftRoute = getPageRoute(leftPage);
-        const rightRoute = getPageRoute(rightPage);
+        const leftRoute = getPageRoute(leftPage, basePath);
+        const rightRoute = getPageRoute(rightPage, basePath);
+        const rootRoute = withBase('/', basePath);
 
         if (leftRoute === rightRoute) return 0;
-        if (leftRoute === '/') return -1;
-        if (rightRoute === '/') return 1;
+        if (leftRoute === rootRoute) return -1;
+        if (rightRoute === rootRoute) return 1;
 
         return leftRoute.localeCompare(rightRoute);
     });
@@ -327,7 +336,7 @@ function buildSitemapEntries(config) {
         const meta = readPageSitemapMeta(pageFile);
         if (meta.exclude) continue;
 
-        const route = getPageRoute(pageFile);
+        const route = getPageRoute(pageFile, basePath);
         const stats = statSync(pageFile);
 
         entries.push({
@@ -386,7 +395,7 @@ function renderRobotsTxt(config) {
 
     if (config.enabled && config.siteUrl) {
         lines.push('');
-        lines.push(`Sitemap: ${config.siteUrl}/sitemap.xml`);
+        lines.push(`Sitemap: ${new URL(withBase('/sitemap.xml', config.basePath), config.siteUrl).toString()}`);
     }
 
     return `${lines.join('\n')}\n`;

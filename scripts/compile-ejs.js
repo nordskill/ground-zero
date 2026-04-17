@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 // @ts-ignore - ejs doesn't have type definitions
 import ejs from 'ejs';
 import { generateSvgSprite } from './svg-sprite.js';
+import { loadBasePath, withBase } from './base-path.js';
 import { transformHtmlImages } from './responsive-images.js';
 import { assertNoPageOutputCollisions, getPagePathInfo } from './page-paths.js';
 
@@ -365,25 +366,36 @@ function resetOutDir(outDir) {
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
- *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig,
+ *   basePath?: string
  * }} [options] - Optional build-time image transform settings.
  * @returns {void}
  */
 function compilePageWithPartials(pageFileAbs, partials, globalData, outDir, options) {
+    const basePath = options?.basePath ?? '/';
     if (!existsSync(pageFileAbs)) return;
     const template = readEjsFile(pageFileAbs);
     const renderedHtml = ejs.render(
         template,
-        { globalData, partials, moduleEntry: MODULE_ENTRY },
+        { globalData, partials, basePath, withBase: renderWithBase, moduleEntry: MODULE_ENTRY },
         { root: PAGES_DIR, filename: pageFileAbs }
     );
-    const html = transformHtmlImages(renderedHtml, options);
+    const html = transformHtmlImages(renderedHtml, { ...options, basePath });
     const pageInfo = getPagePathInfo(PAGES_DIR, pageFileAbs);
     const outPath = join(outDir, pageInfo.outputRelativePath);
     const pageOutDir = dirname(outPath);
     mkdirSync(pageOutDir, { recursive: true });
     writeFileSync(outPath, html);
     console.log('Built', outPath);
+
+    /**
+     * Bind deploy base handling for direct EJS template usage.
+     * @param {string} url - Internal URL or asset path.
+     * @returns {string} Base-aware public URL.
+     */
+    function renderWithBase(url) {
+        return withBase(url, basePath);
+    }
 }
 
 /**
@@ -393,17 +405,19 @@ function compilePageWithPartials(pageFileAbs, partials, globalData, outDir, opti
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
- *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig,
+ *   basePath?: string
  * }} [options] - Optional build-time image transform settings.
  * @returns {Promise<void>}
  */
 export async function compilePage(pageFileAbs, outDir, options) {
+    const basePath = options?.basePath ?? await loadBasePath();
     const targetOutDir = getOutDir(outDir);
     ensureOutDir(targetOutDir);
     const partials = readPartials();
     const globalData = readGlobalData();
     assertNoPageOutputCollisions(PAGES_DIR, walkDirByExtension(PAGES_DIR, '.ejs'));
-    compilePageWithPartials(pageFileAbs, partials, globalData, targetOutDir, options);
+    compilePageWithPartials(pageFileAbs, partials, globalData, targetOutDir, { ...options, basePath });
 }
 
 /**
@@ -412,11 +426,13 @@ export async function compilePage(pageFileAbs, outDir, options) {
  * @param {{
  *   responsiveImages?: boolean,
  *   imageManifest?: Map<string, import('./responsive-images.js').ResponsiveImageEntry>,
- *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig
+ *   imageConfig?: import('./responsive-images.js').ResponsiveImageConfig,
+ *   basePath?: string
  * }} [options] - Optional build-time image transform settings.
  * @returns {Promise<void>}
  */
 export async function compileAll(outDir, options) {
+    const basePath = options?.basePath ?? await loadBasePath();
     const targetOutDir = getOutDir(outDir);
     await generateSvgSprite(ICONS_DIR, SPRITE_PARTIAL);
     resetOutDir(targetOutDir);
@@ -425,7 +441,7 @@ export async function compileAll(outDir, options) {
     const pages = walkDirByExtension(PAGES_DIR, '.ejs');
     assertNoPageOutputCollisions(PAGES_DIR, pages);
     for (const page of pages) {
-        compilePageWithPartials(page, partials, globalData, targetOutDir, options);
+        compilePageWithPartials(page, partials, globalData, targetOutDir, { ...options, basePath });
     }
 }
 

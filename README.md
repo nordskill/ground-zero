@@ -43,16 +43,18 @@ Examples:
 
 ### Referencing assets in templates
 
-Always use `/assets/` paths — Ground Zero takes care of the rest:
+Use `/assets/` paths for asset files. For internal page links and authored asset `src` / `href` values, wrap them with the `withBase()` helper so they stay correct when deploying under a subpath (see [Subpath deploys](#subpath-deploys)):
 
 ```ejs
-<img src="/assets/images/me.jpg" alt="Photo of me">
+<img src="<%= withBase('/assets/images/me.jpg') %>" alt="Photo of me">
 <video autoplay muted loop playsinline>
-    <source src="/assets/video/showreel.webm" type="video/webm">
-    <source src="/assets/video/showreel.mp4" type="video/mp4">
+    <source src="<%= withBase('/assets/video/showreel.webm') %>" type="video/webm">
+    <source src="<%= withBase('/assets/video/showreel.mp4') %>" type="video/mp4">
 </video>
-<a href="/assets/pdf/portfolio.pdf">Download PDF</a>
+<a href="<%= withBase('/assets/pdf/portfolio.pdf') %>">Download PDF</a>
 ```
+
+When `basePath` is not set, `withBase()` returns the path unchanged, so it is safe to use in all projects.
 
 ## Responsive images
 
@@ -101,6 +103,26 @@ export default {
 
 This runs during the production build, just before CSS minification. Existing `@media` blocks inside your CSS are not carried over into the override block — only bare rule declarations are scaled.
 
+## Subpath deploys
+
+If your site lives under a subdirectory (e.g. `https://example.com/my-project/`), set `basePath` in `gzero.config.js`:
+
+```js
+export default {
+    siteUrl: 'https://example.com',
+    basePath: '/my-project/'
+};
+```
+
+`basePath` must have a leading and trailing slash — Ground Zero normalises it automatically. Vite uses it as its `base`, so all built JS and CSS asset URLs are emitted under that subpath automatically. In your templates, use `withBase()` for any authored `href` or `src` that points to an internal page or asset:
+
+```ejs
+<a href="<%= withBase('/about/') %>">About</a>
+<img src="<%= withBase('/assets/images/logo.png') %>" alt="Logo">
+```
+
+`siteUrl` is always the origin only — never include the subpath in it. Ground Zero combines `siteUrl` with `basePath` when generating absolute URLs for the sitemap and `robots.txt`.
+
 ## Sitemap and robots.txt
 
 When you build for production, Ground Zero generates `build/robots.txt` from your config and can also generate `build/sitemap.xml`. Enable sitemap output in `gzero.config.js`:
@@ -120,6 +142,8 @@ export default {
     }
 };
 ```
+
+`siteUrl` is the origin only (scheme + host, no path). Ground Zero uses it to build absolute URLs in the sitemap and the `Sitemap:` line in `robots.txt`. For subpath deploys, pair it with `basePath` — do not include the subpath in `siteUrl` itself.
 
 Set `sitemap.enabled` to `false` to skip sitemap generation. In that case, `siteUrl` is optional and the generated `robots.txt` omits the `Sitemap:` line.
 
@@ -206,7 +230,7 @@ Example `src/pages/index.ejs`:
     <%- include('../partials/header') %>
     <main>
       <h1>Hello from Ground Zero</h1>
-      <img src="/assets/images/me.jpg" alt="Photo of me">
+      <img src="<%= withBase('/assets/images/me.jpg') %>" alt="Photo of me">
     </main>
     <script type="module" src="<%= moduleEntry %>"></script>
   </body>

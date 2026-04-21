@@ -108,6 +108,10 @@ export async function generateSvgSprite(iconsDirPath, outputFilePath) {
                             overrides: {
                                 // Keep IDs for sprite symbols (they're needed for <use> references)
                                 cleanupIds: false,
+                                // Preserve explicit geometry attrs like stroke-width="1".
+                                removeUnknownsAndDefaults: {
+                                    defaultAttrs: false,
+                                },
                                 cleanupNumericValues: {
                                     floatPrecision: 3,
                                 },
